@@ -34,10 +34,10 @@ The project code is divided into key directories:
 | **1** | **Frontend Foundation** | ✅ Complete | Basic layout, styling with Tailwind CSS v4, state configuration with Redux. |
 | **2** | **Backend Foundation** | ✅ Complete | Express server setup, pino-http logging, helmet, compression, rate-limiting. |
 | **3** | **Database Schema** | ✅ Complete | PostgreSQL models & enums in Prisma v7, robust seeds for dev testing. |
-| **4** | **Authentication** | ⏳ Next | JWT Access/Refresh tokens, login, register, verify-email, Google OAuth. |
-| **5** | **Customer APIs** | ⏳ Pending | Menu, Cart, Orders, Addresses, Favorites, Reviews, Coupons. |
-| **6** | **Restaurant Panel** | ⏳ Pending | Restaurant owner dashboard, menu manager, order lifecycle manager. |
-| **7** | **Delivery Panel** | ⏳ Pending | Rider availability, active delivery tracker, delivery history. |
+| **4** | **Authentication** | ✅ Complete | JWT Access/Refresh tokens, login, register, verify-email, Google OAuth. |
+| **5** | **Customer APIs** | ✅ Complete | Menu, Cart, Orders, Addresses, Favorites, Reviews, Coupons. |
+| **6** | **Restaurant Panel** | ✅ Complete | Restaurant owner dashboard, menu manager, order lifecycle manager. |
+| **7** | **Delivery Panel** | ⏳ Next | Rider availability, active delivery tracker, delivery history. |
 | **8** | **Admin Dashboard** | ⏳ Pending | Global management interface for users, restaurants, and order monitoring. |
 | **9** | **Real-Time updates** | ⏳ Pending | Socket.io server configuration for live order & rider location tracking. |
 | **10** | **Payments Integration**| ⏳ Pending | Payments infrastructure with Razorpay (UPI, Cards, Webhooks). |

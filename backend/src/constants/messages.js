@@ -27,6 +27,12 @@ export const MSG = {
   TOKEN_INVALID: 'Invalid authentication token.',
   UNAUTHORIZED: 'You must be logged in to access this resource.',
   FORBIDDEN: 'You do not have permission to perform this action.',
+  LOGOUT_ALL_SUCCESS: 'Logged out from all devices successfully.',
+  PASSWORD_CHANGE_SUCCESS: 'Password changed successfully. Please log in again.',
+  ACCOUNT_SUSPENDED: 'Your account has been suspended. Please contact support.',
+  RESEND_VERIFY_SUCCESS: 'Verification email re-sent. Please check your inbox.',
+  INVALID_RESET_TOKEN: 'This password reset link has expired or is invalid.',
+  INVALID_VERIFY_TOKEN: 'This verification link has expired or is invalid.',
 
   // ── User ─────────────────────────────────────────────────────────────────
   PROFILE_FETCHED: 'Profile fetched successfully.',

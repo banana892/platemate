@@ -21,6 +21,14 @@ import { Router } from 'express'
 import authRoutes from './auth.routes.js'
 import userRoutes from './user.routes.js'
 import restaurantRoutes from './restaurant.routes.js'
+import cartRoutes from './cart.routes.js'
+import addressRoutes from './address.routes.js'
+import favoriteRoutes from './favorite.routes.js'
+import couponRoutes from './coupon.routes.js'
+import checkoutRoutes from './checkout.routes.js'
+import orderRoutes from './order.routes.js'
+import searchRoutes from './search.routes.js'
+import partnerRoutes from './partner.routes.js'
 
 const router = Router()
 
@@ -50,17 +58,17 @@ router.use('/users', userRoutes)
 router.use('/restaurants', restaurantRoutes)
 
 // Phase 5 — Customer APIs (added in Phase 5)
-// router.use('/menu', menuRoutes)
-// router.use('/cart', cartRoutes)
-// router.use('/orders', orderRoutes)
-// router.use('/addresses', addressRoutes)
-// router.use('/favorites', favoriteRoutes)
-// router.use('/reviews', reviewRoutes)
-// router.use('/coupons', couponRoutes)
+router.use('/cart', cartRoutes)
+router.use('/addresses', addressRoutes)
+router.use('/favorites', favoriteRoutes)
+router.use('/coupons', couponRoutes)
+router.use('/checkout', checkoutRoutes)
+router.use('/orders', orderRoutes)
+router.use('/search', searchRoutes)
 // router.use('/notifications', notificationRoutes)
 
 // Phase 6 — Partner APIs
-// router.use('/partner', partnerRoutes)
+router.use('/partner', partnerRoutes)
 
 // Phase 7 — Rider APIs
 // router.use('/rider', riderRoutes)

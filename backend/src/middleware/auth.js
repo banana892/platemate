@@ -59,6 +59,7 @@ export const authenticate = asyncHandler(async (req, res, next) => {
       role: true,
       isActive: true,
       isVerified: true,
+      tokenVersion: true,
       deletedAt: true,
     },
   })
@@ -70,6 +71,11 @@ export const authenticate = asyncHandler(async (req, res, next) => {
 
   if (!user.isActive) {
     throw new ApiError(403, 'Your account has been suspended. Please contact support.')
+  }
+
+  // Verify token version matches user's current version
+  if (payload.tokenVersion !== undefined && user.tokenVersion !== payload.tokenVersion) {
+    throw new ApiError(401, MSG.TOKEN_EXPIRED)
   }
 
   // ── 5. Attach user to request object ──────────────────────────────────
@@ -97,10 +103,12 @@ export const optionalAuthenticate = asyncHandler(async (req, res, next) => {
 
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, email: true, role: true, tokenVersion: true },
     })
 
-    if (user) req.user = user
+    if (user && (payload.tokenVersion === undefined || user.tokenVersion === payload.tokenVersion)) {
+      req.user = user
+    }
   } catch {
     // Silent fail — treat as unauthenticated
   }

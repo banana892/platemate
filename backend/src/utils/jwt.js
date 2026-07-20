@@ -111,28 +111,3 @@ export const verifyEmailToken = (token) => {
   }
 }
 
-// ── Cookie Options ─────────────────────────────────────────────────────────────
-
-/**
- * Secure cookie options for the refresh token
- * httpOnly: JS can't read it (XSS protection)
- * secure: Only sent over HTTPS (disable in dev)
- * sameSite: CSRF protection
- */
-export const refreshTokenCookieOptions = {
-  httpOnly: true,
-  secure: env.NODE_ENV === 'production',
-  sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax',
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
-  path: '/api/v1/auth', // Only sent to auth routes
-}
-
-/**
- * Cookie options for clearing the refresh token on logout
- */
-export const clearRefreshTokenCookieOptions = {
-  httpOnly: true,
-  secure: env.NODE_ENV === 'production',
-  sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax',
-  path: '/api/v1/auth',
-}

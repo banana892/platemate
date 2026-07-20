@@ -1,28 +1,24 @@
-/**
- * restaurant.routes.js — Public Restaurant Route Definitions
- *
- * GET  /restaurants              — list all (paginated, filtered, sorted)
- * GET  /restaurants/featured     — featured/promoted restaurants
- * GET  /restaurants/search       — full-text search
- * GET  /restaurants/:slug        — single restaurant details + menu
- * GET  /restaurants/:slug/menu   — just the menu
- * GET  /restaurants/:slug/reviews— restaurant reviews
- */
-
 import { Router } from 'express'
 import { optionalAuthenticate } from '../middleware/auth.js'
+import { validate } from '../middleware/validate.js'
 import * as restaurantController from '../controllers/restaurant.controller.js'
+import {
+  listRestaurantsSchema,
+  getRestaurantSchema,
+  getMenuSchema,
+  getReviewsSchema,
+} from '../validators/restaurant.validator.js'
 
 const router = Router()
 
 // Optional auth: logged-in users see "favorited" state
 router.use(optionalAuthenticate)
 
-router.get('/', restaurantController.listRestaurants)
+router.get('/', validate(listRestaurantsSchema), restaurantController.listRestaurants)
 router.get('/featured', restaurantController.getFeatured)
 router.get('/search', restaurantController.searchRestaurants)
-router.get('/:slug', restaurantController.getRestaurant)
-router.get('/:slug/menu', restaurantController.getMenu)
-router.get('/:slug/reviews', restaurantController.getReviews)
+router.get('/:slug', validate(getRestaurantSchema), restaurantController.getRestaurant)
+router.get('/:slug/menu', validate(getMenuSchema), restaurantController.getMenu)
+router.get('/:slug/reviews', validate(getReviewsSchema), restaurantController.getReviews)
 
 export default router

@@ -97,6 +97,12 @@ enum DayOfWeek {
   SUNDAY
 }
 
+/// Token types for verification and password reset flows
+enum TokenType {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // IDENTITY DOMAIN
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,21 +118,23 @@ model User {
   avatar     String?
   role       Role      @default(CUSTOMER)
   isVerified Boolean   @default(false) @map("is_verified")
-  isActive   Boolean   @default(true) @map("is_active")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
-  deletedAt  DateTime? @map("deleted_at")
+  isActive     Boolean   @default(true) @map("is_active")
+  tokenVersion Int       @default(0) @map("token_version")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
 
   // ── Relationships ──────────────────────────────────────────────────────
-  addresses       Address[]
-  refreshTokens   RefreshToken[]
-  restaurantOwner RestaurantOwner?
-  deliveryPartner DeliveryPartner?
-  cart            Cart?
-  orders          Order[]
-  reviews         Review[]
-  favorites       Favorite[]
-  notifications   Notification[]
+  addresses          Address[]
+  refreshTokens      RefreshToken[]
+  verificationTokens VerificationToken[]
+  restaurantOwner    RestaurantOwner?
+  deliveryPartner    DeliveryPartner?
+  cart               Cart?
+  orders             Order[]
+  reviews            Review[]
+  favorites          Favorite[]
+  notifications      Notification[]
 
   // ── Indexes ────────────────────────────────────────────────────────────
   @@index([role, isActive, deletedAt], name: "idx_user_role_active")
@@ -180,6 +188,26 @@ model RefreshToken {
   @@index([hashedToken], name: "idx_refresh_token_hash")
   @@index([expiresAt], name: "idx_refresh_token_expiry")
   @@map("refresh_tokens")
+}
+
+/// Tokens for email verification and password reset.
+/// Hashed for security, single-use (tracked via usedAt).
+model VerificationToken {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  hashedToken String    @map("hashed_token")
+  type        TokenType
+  expiresAt   DateTime  @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // ── Relationships ──────────────────────────────────────────────────────
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ── Indexes ────────────────────────────────────────────────────────────
+  @@index([hashedToken, type], name: "idx_verification_token_hash")
+  @@index([userId, type], name: "idx_verification_token_user")
+  @@map("verification_tokens")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -249,6 +277,7 @@ model Restaurant {
   reviews       Review[]
   favorites     Favorite[]
   carts         Cart[]
+  settings      RestaurantSettings?
 
   // ── Indexes ────────────────────────────────────────────────────────────
   @@index([ownerId], name: "idx_restaurant_owner")
@@ -600,4 +629,29 @@ model DeliveryPartner {
   // ── Indexes ────────────────────────────────────────────────────────────
   @@index([isAvailable, isApproved], name: "idx_delivery_partner_available")
   @@map("delivery_partners")
+}
+
+/// Operational settings for a restaurant (Phase 6).
+/// Prevents overloading the main Restaurant model with granular settings.
+model RestaurantSettings {
+  id                        String     @id @default(uuid())
+  restaurantId              String     @unique @map("restaurant_id")
+  autoAcceptOrders          Boolean    @default(false) @map("auto_accept_orders")
+  acceptCashOnDelivery      Boolean    @default(true) @map("accept_cash_on_delivery")
+  acceptScheduledOrders     Boolean    @default(false) @map("accept_scheduled_orders")
+  preparationBufferTime     Int        @default(5) @map("preparation_buffer_time")
+  estimatedPreparationTime Int        @default(20) @map("estimated_preparation_time")
+  maxConcurrentOrders       Int        @default(10) @map("max_concurrent_orders")
+  defaultPackagingCharge    Decimal    @default(0.00) @map("default_packaging_charge") @db.Decimal(10, 2)
+  restaurantAnnouncement    String?    @map("restaurant_announcement")
+  isTemporarilyClosed       Boolean    @default(false) @map("is_temporarily_closed")
+  temporaryClosureReason    String?    @map("temporary_closure_reason")
+  autoPauseWhenBusy         Boolean    @default(false) @map("auto_pause_when_busy")
+  createdAt                 DateTime   @default(now()) @map("created_at")
+  updatedAt                 DateTime   @updatedAt @map("updated_at")
+
+  // Relationships
+  restaurant                Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("restaurant_settings")
 }

@@ -70,7 +70,7 @@ const handleJWTError = (err) => {
 // ── Zod Error Mapper ───────────────────────────────────────────────────────────
 
 const handleZodError = (err) => {
-  const errors = err.errors.map((e) => ({
+  const errors = (err.issues || []).map((e) => ({
     field: e.path.join('.'),
     message: e.message,
   }))
