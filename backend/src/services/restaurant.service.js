@@ -178,6 +178,13 @@ export const listRestaurants = async (query) => {
  * Retrieve detailed restaurant by ID or slug
  */
 export const getRestaurant = async (idOrSlug) => {
+  const { getCache, setCache } = await import('../redis/redis.service.js')
+  const { CACHE_KEYS, CACHE_TTLS } = await import('../redis/cache.constants.js')
+
+  const cacheKey = CACHE_KEYS.RESTAURANT(idOrSlug)
+  const cached = await getCache(cacheKey)
+  if (cached) return cached
+
   const restaurant = await restaurantRepo.findRestaurantByIdOrSlug(idOrSlug)
   if (!restaurant) {
     throw new ApiError(HTTP.NOT_FOUND, MSG.RESTAURANT_NOT_FOUND)
@@ -221,7 +228,7 @@ export const getRestaurant = async (idOrSlug) => {
     ? !todaysHours.isClosed && currentTime >= todaysHours.openTime && currentTime <= todaysHours.closeTime
     : false
 
-  return {
+  const result = {
     id: restaurant.id,
     name: restaurant.name,
     slug: restaurant.slug,
@@ -245,20 +252,33 @@ export const getRestaurant = async (idOrSlug) => {
     businessHours,
     categories,
   }
+
+  await setCache(cacheKey, result, CACHE_TTLS.RESTAURANT)
+  return result
 }
 
 /**
  * Retrieve menu items of a restaurant
  */
 export const getMenu = async (idOrSlug, filters = {}) => {
+  const { getCache, setCache } = await import('../redis/redis.service.js')
+  const { CACHE_KEYS, CACHE_TTLS } = await import('../redis/cache.constants.js')
+
   const restaurant = await restaurantRepo.findRestaurantByIdOrSlug(idOrSlug)
   if (!restaurant) {
     throw new ApiError(HTTP.NOT_FOUND, MSG.RESTAURANT_NOT_FOUND)
   }
 
-  const menu = await restaurantRepo.findMenuItems(restaurant.id, filters)
+  const hasFilters = Object.keys(filters).length > 0
+  const cacheKey = CACHE_KEYS.MENU(restaurant.id)
 
-  return menu
+  if (!hasFilters) {
+    const cached = await getCache(cacheKey)
+    if (cached) return cached
+  }
+
+  const menu = await restaurantRepo.findMenuItems(restaurant.id, filters)
+  const result = menu
     .map((cat) => ({
       id: cat.id,
       name: cat.name,
@@ -275,4 +295,10 @@ export const getMenu = async (idOrSlug, filters = {}) => {
       })),
     }))
     .filter((cat) => cat.menuItems.length > 0) // Only return categories that have matched items
+
+  if (!hasFilters) {
+    await setCache(cacheKey, result, CACHE_TTLS.MENU)
+  }
+
+  return result
 }

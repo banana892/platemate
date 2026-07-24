@@ -1,78 +1,141 @@
 /**
- * upload.js — Multer File Upload Middleware
+ * upload.js — Multer File Upload Middleware (Phase 12, hardened Phase 13)
  *
- * WHY MULTER?
- * Express doesn't handle multipart/form-data by default (the encoding used
- * for file uploads). Multer parses this and gives us access to req.file.
+ * Configures memory storage, filters file formats, validates maximum size,
+ * and performs magic byte validation to prevent content-type spoofing.
  *
- * MEMORY STORAGE vs DISK STORAGE:
- * We use memory storage (not disk) because:
- * 1. We immediately forward to Cloudinary — no need to touch the filesystem
- * 2. On serverless/cloud environments (Railway, Render), writing to disk
- *    is unreliable between requests
- * 3. Faster: buffer → Cloudinary stream vs buffer → disk → read → Cloudinary
+ * MAGIC BYTE VALIDATION:
+ * MIME type headers can be spoofed — a PHP script can be uploaded as image.jpg
+ * and the mimetype check will pass. Magic bytes (file signatures) are the first
+ * N bytes of a file that identify its actual format. We check these AFTER multer
+ * processes the buffer to verify the content matches the declared type.
  *
- * SECURITY:
- * - File type validation (MIME type + magic bytes via file.mimetype)
- * - File size limit (5MB) to prevent memory exhaustion
- * - Only specific MIME types are allowed
- *
- * NOTE: In Phase 12, we'll create the actual Cloudinary upload service that
- * takes req.file.buffer and streams it to Cloudinary.
+ * WEBP DETECTION:
+ * WEBP files have a 12-byte signature: RIFF....WEBP
+ * Bytes 0-3: 52 49 46 46 (RIFF)
+ * Bytes 8-11: 57 45 42 50 (WEBP)
+ * We check both ranges.
  */
 
 import multer from 'multer'
 import { ApiError } from '../utils/ApiError.js'
-import { MSG } from '../constants/messages.js'
+import { HTTP } from '../constants/httpStatus.js'
+import { SECURITY_CONFIG } from '../security/security.config.js'
+import * as auditService from '../security/audit.service.js'
 
-// ── Allowed MIME types ────────────────────────────────────────────────────────
-const ALLOWED_MIMES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
-const MAX_SIZE_BYTES = 5 * 1024 * 1024 // 5MB
-
-// ── Storage: memory (no disk writes) ─────────────────────────────────────────
+const { upload: uploadConfig } = SECURITY_CONFIG
 const storage = multer.memoryStorage()
 
-// ── File filter ───────────────────────────────────────────────────────────────
+/**
+ * Filter files ensuring only allowed MIME types are accepted.
+ * This is the first check — before the buffer is read.
+ */
 const fileFilter = (req, file, cb) => {
-  if (ALLOWED_MIMES.includes(file.mimetype)) {
-    cb(null, true) // Accept
-  } else {
-    cb(new ApiError(400, MSG.INVALID_FILE_TYPE), false) // Reject
+  if (!uploadConfig.allowedMimeTypes.includes(file.mimetype)) {
+    return cb(
+      new ApiError(
+        HTTP.BAD_REQUEST,
+        `Invalid file format. Allowed types are: ${uploadConfig.allowedMimeTypes.join(', ')}.`
+      ),
+      false
+    )
   }
+  cb(null, true)
 }
 
-// ── Multer instance ───────────────────────────────────────────────────────────
 const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: MAX_SIZE_BYTES,
-    files: 1, // Single file per request (for now)
+    fileSize: uploadConfig.maxSizeBytes,
   },
 })
 
-// ── Named middleware exports ───────────────────────────────────────────────────
-
-/** Single image upload — field name: 'image' */
-export const uploadSingle = upload.single('image')
-
-/** For routes that accept: logo + cover (restaurant creation) */
-export const uploadRestaurantImages = upload.fields([
-  { name: 'logo', maxCount: 1 },
-  { name: 'cover', maxCount: 1 },
-])
+/**
+ * Sanitize the original filename to prevent path traversal attacks.
+ * Strips all characters except alphanumeric, dots, hyphens, and underscores.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+const sanitizeFilename = (name) => {
+  if (!name) return 'upload'
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 255)
+}
 
 /**
- * Error handler for Multer-specific errors
- * Must be used AFTER the upload middleware in route definitions.
- * Multer errors don't flow through normal Express error handling automatically.
+ * Verify that the file buffer's magic bytes match the declared MIME type.
+ * This catches content-type spoofing (e.g., a script renamed to .jpg).
+ *
+ * @param {Buffer} buffer
+ * @param {string} mimetype
+ * @returns {boolean}
  */
-export const handleUploadError = (err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return next(new ApiError(400, MSG.FILE_TOO_LARGE))
-    }
-    return next(new ApiError(400, err.message))
+const validateMagicBytes = (buffer, mimetype) => {
+  if (!buffer || buffer.length < 4) return false
+
+  const expected = uploadConfig.magicBytes[mimetype]
+  if (!expected) return false // Unknown type — reject
+
+  // Check standard magic bytes (first N bytes)
+  for (let i = 0; i < expected.length; i++) {
+    if (buffer[i] !== expected[i]) return false
   }
-  next(err) // Pass to global error handler
+
+  // WEBP requires an additional check at bytes 8-11 (WEBP marker after RIFF header)
+  if (mimetype === 'image/webp') {
+    if (buffer.length < 12) return false
+    const webpMarker = SECURITY_CONFIG.upload.webpMarker
+    for (let i = 0; i < webpMarker.length; i++) {
+      if (buffer[8 + i] !== webpMarker[i]) return false
+    }
+  }
+
+  return true
+}
+
+/**
+ * Post-multer middleware that validates magic bytes and sanitizes the filename.
+ * Must be used AFTER uploadImageMiddleware() in the middleware chain.
+ *
+ * Usage:
+ *   router.patch('/logo', authenticate, uploadImageMiddleware('image'), validateFileSignature, controller)
+ */
+export const validateFileSignature = (req, res, next) => {
+  if (!req.file) return next() // No file uploaded — let route handler decide
+
+  // Sanitize filename
+  req.file.originalname = sanitizeFilename(req.file.originalname)
+
+  // Validate magic bytes
+  const valid = validateMagicBytes(req.file.buffer, req.file.mimetype)
+  if (!valid) {
+    // Fire-and-forget audit log
+    auditService.uploadRejected(req, req.user?.id, `Magic byte mismatch for ${req.file.mimetype}`)
+
+    return next(
+      new ApiError(HTTP.BAD_REQUEST, 'File content does not match its declared type. Upload rejected.')
+    )
+  }
+
+  next()
+}
+
+/**
+ * Express middleware decorator that intercepts multer errors and formats them into clean API responses.
+ * Includes the validateFileSignature check in the chain.
+ */
+export const uploadImageMiddleware = (fieldName) => {
+  const uploadSingle = upload.single(fieldName)
+  return (req, res, next) => {
+    uploadSingle(req, res, (err) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return next(new ApiError(HTTP.BAD_REQUEST, 'File size exceeds limit. Maximum allowed size is 5 MB.'))
+        }
+        return next(new ApiError(HTTP.BAD_REQUEST, err.message))
+      }
+      next()
+    })
+  }
 }

@@ -5,6 +5,18 @@ import { ApiError } from '../utils/ApiError.js'
 import { MSG } from '../constants/messages.js'
 import { HTTP } from '../constants/httpStatus.js'
 
+const invalidateRestaurantCache = async (restaurantId, slug = null) => {
+  try {
+    const { deleteCache } = await import('../redis/redis.service.js')
+    const { CACHE_KEYS } = await import('../redis/cache.constants.js')
+    await deleteCache(CACHE_KEYS.RESTAURANT(restaurantId))
+    await deleteCache(CACHE_KEYS.MENU(restaurantId))
+    if (slug) {
+      await deleteCache(CACHE_KEYS.RESTAURANT(slug))
+    }
+  } catch (err) {}
+}
+
 /**
  * Helper to parse date ranges for analytics
  */
@@ -162,6 +174,7 @@ export const getProfile = async (restaurantId) => {
 
 export const updateProfile = async (restaurantId, data) => {
   const updated = await partnerRepo.updateRestaurantProfile(restaurantId, data)
+  await invalidateRestaurantCache(restaurantId, updated.slug)
   return getProfile(updated.id)
 }
 
@@ -184,6 +197,7 @@ export const getSettings = async (restaurantId) => {
 
 export const updateSettings = async (restaurantId, data) => {
   const updated = await partnerRepo.updateSettings(restaurantId, data)
+  await invalidateRestaurantCache(restaurantId)
   return {
     autoAcceptOrders: updated.autoAcceptOrders,
     acceptCashOnDelivery: updated.acceptCashOnDelivery,
@@ -218,6 +232,7 @@ export const getBusinessHours = async (restaurantId) => {
 export const updateBusinessHours = async (restaurantId, data) => {
   const { businessHours } = data
   await partnerRepo.updateBusinessHours(restaurantId, businessHours)
+  await invalidateRestaurantCache(restaurantId)
   return getBusinessHours(restaurantId)
 }
 
@@ -228,7 +243,9 @@ export const getCategories = async (restaurantId) => {
 }
 
 export const createCategory = async (restaurantId, data) => {
-  return partnerRepo.createCategory(restaurantId, data)
+  const result = await partnerRepo.createCategory(restaurantId, data)
+  await invalidateRestaurantCache(restaurantId)
+  return result
 }
 
 export const updateCategory = async (restaurantId, categoryId, data) => {
@@ -237,7 +254,9 @@ export const updateCategory = async (restaurantId, categoryId, data) => {
   if (!exists) {
     throw new ApiError(HTTP.FORBIDDEN, MSG.FORBIDDEN)
   }
-  return partnerRepo.updateCategory(categoryId, data)
+  const result = await partnerRepo.updateCategory(categoryId, data)
+  await invalidateRestaurantCache(restaurantId)
+  return result
 }
 
 export const deleteCategory = async (restaurantId, categoryId) => {
@@ -273,6 +292,7 @@ export const deleteCategory = async (restaurantId, categoryId) => {
     )
   }
 
+  await invalidateRestaurantCache(restaurantId)
   return { id: categoryId }
 }
 
@@ -342,7 +362,9 @@ export const createMenuItem = async (restaurantId, data) => {
     throw new ApiError(HTTP.BAD_REQUEST, 'Invalid Category ID')
   }
 
-  return partnerRepo.createMenuItem(restaurantId, data)
+  const result = await partnerRepo.createMenuItem(restaurantId, data)
+  await invalidateRestaurantCache(restaurantId)
+  return result
 }
 
 export const updateMenuItem = async (restaurantId, id, data) => {
@@ -360,7 +382,9 @@ export const updateMenuItem = async (restaurantId, id, data) => {
     }
   }
 
-  return partnerRepo.updateMenuItem(id, data)
+  const result = await partnerRepo.updateMenuItem(id, data)
+  await invalidateRestaurantCache(restaurantId)
+  return result
 }
 
 export const deleteMenuItem = async (restaurantId, id) => {
@@ -369,6 +393,7 @@ export const deleteMenuItem = async (restaurantId, id) => {
     throw new ApiError(HTTP.NOT_FOUND, MSG.MENU_ITEM_NOT_FOUND)
   }
   await partnerRepo.softDeleteMenuItem(id)
+  await invalidateRestaurantCache(restaurantId)
   return { id }
 }
 
@@ -377,7 +402,9 @@ export const updateMenuItemAvailability = async (restaurantId, id, isAvailable) 
   if (!item || item.restaurantId !== restaurantId) {
     throw new ApiError(HTTP.NOT_FOUND, MSG.MENU_ITEM_NOT_FOUND)
   }
-  return partnerRepo.updateMenuItem(id, { isAvailable })
+  const result = await partnerRepo.updateMenuItem(id, { isAvailable })
+  await invalidateRestaurantCache(restaurantId)
+  return result
 }
 
 // ── Restaurant Availability Toggles ──────────────────────────────────────────
@@ -534,6 +561,35 @@ export const updateOrderStatus = async (restaurantId, orderId, status) => {
   }
 
   const updated = await partnerRepo.updateOrderStatus(orderId, status)
+
+  // Real-time Events
+  const { emitToUser, emitToRestaurant, emitToRider } = await import('../socket/socket.events.js')
+  const { EVENTS } = await import('../socket/socket.constants.js')
+
+  emitToUser(order.userId, EVENTS.ORDER_UPDATED, {
+    id: updated.id,
+    orderNumber: updated.orderNumber,
+    status: updated.status,
+    updatedAt: updated.updatedAt,
+  })
+
+  emitToRestaurant(restaurantId, EVENTS.RESTAURANT_ORDER_UPDATED, {
+    id: updated.id,
+    orderNumber: updated.orderNumber,
+    status: updated.status,
+    updatedAt: updated.updatedAt,
+  })
+
+  if (status === 'READY_FOR_PICKUP' && order.deliveryPartnerId) {
+    emitToRider(order.deliveryPartnerId, EVENTS.RIDER_NEW_ASSIGNMENT, {
+      id: updated.id,
+      orderNumber: updated.orderNumber,
+      status: updated.status,
+      restaurantId: restaurantId,
+      updatedAt: updated.updatedAt,
+    })
+  }
+
   return {
     id: updated.id,
     orderNumber: updated.orderNumber,

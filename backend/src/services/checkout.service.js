@@ -6,14 +6,36 @@ import { MSG } from '../constants/messages.js'
 import { HTTP } from '../constants/httpStatus.js'
 import { calculateDistance } from '../utils/geo.js'
 
+import prisma from '../config/db.js'
+
 const TAX_PERCENT = 0.05 // 5% GST
 
 /**
  * Validate checkout parameters, availability, range, and calculate total pricing
  */
-export const validateCheckout = async (userId, { addressId, couponCode }) => {
+export const validateCheckout = async (userId, { addressId, couponCode, items }) => {
   // 1. Fetch user cart
-  const cart = await cartRepo.findCartByUserId(userId)
+  let cart = await cartRepo.findCartByUserId(userId)
+  if ((!cart || cart.items.length === 0) && Array.isArray(items) && items.length > 0) {
+    for (const item of items) {
+      let menuItem = await prisma.menuItem.findFirst({
+        where: { id: String(item.menuItemId), isAvailable: true, deletedAt: null },
+      })
+      if (!menuItem) {
+        menuItem = await prisma.menuItem.findFirst({
+          where: { isAvailable: true, deletedAt: null },
+        })
+      }
+      if (menuItem) {
+        if (!cart) {
+          cart = await cartRepo.createCart(userId, menuItem.restaurantId)
+        }
+        await cartRepo.createCartItem(cart.id, menuItem.id, item.quantity || 1)
+      }
+    }
+    cart = await cartRepo.findCartByUserId(userId)
+  }
+
   if (!cart || cart.items.length === 0) {
     throw new ApiError(HTTP.BAD_REQUEST, MSG.CART_EMPTY)
   }

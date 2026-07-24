@@ -22,9 +22,9 @@
  */
 
 import { Router } from 'express'
-import { authLimiter, passwordResetLimiter } from '../middleware/rateLimiter.js'
-import { authenticate } from '../middleware/auth.js'
+import { authenticate, optionalAuthenticate } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
+import { rateLimitMiddleware } from '../redis/cache.middleware.js'
 import * as authController from '../controllers/auth.controller.js'
 import {
   registerSchema,
@@ -34,26 +34,31 @@ import {
   forgotPasswordSchema,
   resetPasswordSchema,
   changePasswordSchema,
+  googleVerifySchema,
 } from '../validators/auth.validator.js'
 
 const router = Router()
 
-// Apply strict rate limiting to all auth routes
-router.use(authLimiter)
-
 // ── Public Routes ─────────────────────────────────────────────────────────────
-router.post('/register', validate(registerSchema), authController.register)
-router.post('/login', validate(loginSchema), authController.login)
+router.post('/register', rateLimitMiddleware('register', 5, 60), validate(registerSchema), authController.register)
+router.post('/login', rateLimitMiddleware('login', 20, 60), validate(loginSchema), authController.login)
 router.post('/refresh', authController.refreshToken)
-router.get('/verify-email', validate(verifyEmailSchema), authController.verifyEmail)
-router.post('/resend-verify', validate(resendVerifySchema), authController.resendVerification)
-router.post('/forgot-password', passwordResetLimiter, validate(forgotPasswordSchema), authController.forgotPassword)
+router.get('/verify-email', rateLimitMiddleware('verify-email', 5, 60), validate(verifyEmailSchema), authController.verifyEmail)
+router.post('/resend-verify', rateLimitMiddleware('resend-verify', 3, 60), validate(resendVerifySchema), authController.resendVerification)
+router.post('/forgot-password', rateLimitMiddleware('forgot-password', 3, 60), validate(forgotPasswordSchema), authController.forgotPassword)
 router.post('/reset-password', validate(resetPasswordSchema), authController.resetPassword)
 
+// Google OAuth
+router.get('/google', authController.googleRedirect)
+router.get('/google/callback', authController.googleCallback)
+router.post('/google', validate(googleVerifySchema), authController.googleVerify)
+router.post('/google/verify', validate(googleVerifySchema), authController.googleVerify)
+
 // ── Protected Routes ───────────────────────────────────────────────────────────
-router.post('/logout', authenticate, authController.logout)
+router.post('/logout', optionalAuthenticate, authController.logout)
 router.post('/logout-all', authenticate, authController.logoutAll)
 router.get('/me', authenticate, authController.getMe)
 router.post('/change-password', authenticate, validate(changePasswordSchema), authController.changePassword)
 
 export default router
+

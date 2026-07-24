@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { FiPlus, FiMinus, FiTrash2, FiArrowRight, FiShoppingBag } from 'react-icons/fi'
 
 export default function Cart() {
-  const { items, count, subtotal, tax, deliveryFee, total, restaurantName, removeItem, updateQuantity, clearCart } = useCart()
+  const { items, count, subtotal, tax, deliveryFee, total, restaurantName, updateQuantity, clearCart } = useCart()
 
   if (items.length === 0) {
     return (

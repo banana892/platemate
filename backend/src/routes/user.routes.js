@@ -9,6 +9,7 @@
 
 import { Router } from 'express'
 import { authenticate } from '../middleware/auth.js'
+import { uploadImageMiddleware } from '../middleware/upload.js'
 import * as userController from '../controllers/user.controller.js'
 
 const router = Router()
@@ -18,7 +19,9 @@ router.use(authenticate)
 
 router.get('/profile', userController.getProfile)
 router.patch('/profile', userController.updateProfile)
+router.patch('/profile-image', uploadImageMiddleware('image'), userController.updateProfileImage)
 router.patch('/change-password', userController.changePassword)
 router.delete('/account', userController.deleteAccount)
+router.delete('/me', userController.deleteAccount)
 
 export default router

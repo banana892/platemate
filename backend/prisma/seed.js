@@ -298,7 +298,7 @@ async function main() {
       postalCode: '560095',
       latitude: 12.9352,
       longitude: 77.6245,
-      deliveryRadius: 8.0,
+      deliveryRadius: 15.0,
       minimumOrder: 199,
       deliveryFee: 30,
       averageDeliveryTime: 35,
@@ -839,8 +839,7 @@ async function main() {
       amount: 643.42,
       currency: 'INR',
       status: 'CAPTURED',
-      transactionId: 'pay_' + uuidv4().replace(/-/g, '').slice(0, 14),
-      paidAt: new Date('2026-07-08T19:00:00Z'),
+      providerPaymentId: 'pay_' + uuidv4().replace(/-/g, '').slice(0, 14),
     },
   })
 
@@ -896,8 +895,7 @@ async function main() {
       amount: 814.08,
       currency: 'INR',
       status: 'CAPTURED',
-      transactionId: 'pay_' + uuidv4().replace(/-/g, '').slice(0, 14),
-      paidAt: new Date('2026-07-10T13:05:00Z'),
+      providerPaymentId: 'pay_' + uuidv4().replace(/-/g, '').slice(0, 14),
     },
   })
 

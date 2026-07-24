@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { authenticate } from '../middleware/auth.js'
 import { authorize } from '../middleware/authorize.js'
 import { validate } from '../middleware/validate.js'
+import { uploadImageMiddleware } from '../middleware/upload.js'
 import prisma from '../config/db.js'
 import { ApiError } from '../utils/ApiError.js'
 import asyncHandler from '../middleware/asyncHandler.js'
@@ -114,5 +115,10 @@ router.get('/analytics', withRestaurant, validate(analyticsFilterSchema), partne
 // Notifications (Not scoped to a single restaurant, scoped to user account)
 router.get('/notifications', partnerController.getNotifications)
 router.patch('/notifications/:id/read', partnerController.markNotificationRead)
+
+// Media uploads
+router.patch('/restaurant/logo', withRestaurant, uploadImageMiddleware('image'), partnerController.updateRestaurantLogo)
+router.patch('/restaurant/banner', withRestaurant, uploadImageMiddleware('image'), partnerController.updateRestaurantBanner)
+router.patch('/menu/:id/image', withRestaurant, uploadImageMiddleware('image'), partnerController.updateMenuItemImage)
 
 export default router

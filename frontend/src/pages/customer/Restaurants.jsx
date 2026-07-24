@@ -1,12 +1,11 @@
 import { useSelector, useDispatch } from 'react-redux'
-import { setFilters, setSearchQuery, resetFilters } from '../../store/slices/restaurantSlice.js'
+import { setFilters, resetFilters } from '../../store/slices/restaurantSlice.js'
 import RestaurantCard from '../../components/ui/RestaurantCard.jsx'
 import SearchBar from '../../components/ui/SearchBar.jsx'
-import { CardSkeleton } from '../../components/ui/Loading.jsx'
 import Pagination from '../../components/ui/Pagination.jsx'
 import { SORT_OPTIONS, CUISINE_FILTERS } from '../../utils/constants.js'
 import { useState } from 'react'
-import { FiFilter, FiX, FiSliders } from 'react-icons/fi'
+import { FiX, FiSliders } from 'react-icons/fi'
 
 const ITEMS_PER_PAGE = 8
 

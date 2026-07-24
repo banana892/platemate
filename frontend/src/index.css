@@ -15,6 +15,9 @@
   --radius-lg: 16px;
   --radius-md: 10px;
   --radius-full: 9999px;
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ===== BASE ===== */
@@ -28,6 +31,15 @@ body {
   color: var(--color-text-main);
   background: var(--color-surface);
   overflow-x: hidden;
+}
+
+/* ===== ACCESSIBILITY & FOCUS RINGS ===== */
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 /* ===== GRADIENT UTILITIES ===== */
@@ -48,7 +60,7 @@ body {
 
 /* ===== TRANSITION UTILITY ===== */
 .transition-smooth {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--transition-normal);
 }
 
 /* ===== ANIMATIONS ===== */
@@ -97,7 +109,7 @@ body {
 @keyframes scaleIn {
   from {
     opacity: 0;
-    transform: scale(0.9);
+    transform: scale(0.95);
   }
   to {
     opacity: 1;
@@ -106,19 +118,19 @@ body {
 }
 
 .animate-fade-up {
-  animation: fadeUp 0.8s ease-out both;
+  animation: fadeUp 0.8s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .animate-fade-up-delay-1 {
-  animation: fadeUp 0.8s ease-out 0.2s both;
+  animation: fadeUp 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.2s both;
 }
 
 .animate-fade-up-delay-2 {
-  animation: fadeUp 0.8s ease-out 0.4s both;
+  animation: fadeUp 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.4s both;
 }
 
 .animate-fade-up-delay-3 {
-  animation: fadeUp 0.8s ease-out 0.6s both;
+  animation: fadeUp 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.6s both;
 }
 
 .animate-hero-zoom {
@@ -136,15 +148,25 @@ body {
 }
 
 .animate-slide-in-right {
-  animation: slideInRight 0.3s ease-out both;
+  animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.3s ease-out both;
+  animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .animate-scale-in {
-  animation: scaleIn 0.3s ease-out both;
+  animation: scaleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* ===== PREFERS REDUCED MOTION ===== */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ===== SCROLL REVEAL ===== */

@@ -28,6 +28,7 @@ import { HTTP } from '../constants/httpStatus.js'
 import { MSG } from '../constants/messages.js'
 import logger from '../config/logger.js'
 import { isDev } from '../config/env.js'
+import * as auditService from '../security/audit.service.js'
 
 // ── Prisma Error Mapper ────────────────────────────────────────────────────────
 
@@ -92,6 +93,7 @@ const errorHandler = (err, req, res, next) => {
     error = handleJWTError(err)
   } else if (!(err instanceof ApiError)) {
     // Unknown/unexpected error — wrap in a non-operational ApiError
+    // In production, ALWAYS return a generic message — never leak internal details
     error = new ApiError(
       HTTP.INTERNAL_ERROR,
       isDev ? err.message : MSG.SERVER_ERROR,
@@ -115,10 +117,13 @@ const errorHandler = (err, req, res, next) => {
           url: req.url,
           ip: req.ip,
           userId: req.user?.id,
+          requestId: req.id,
         },
       },
       '🔴 Unhandled error'
     )
+    // Best-effort audit for unhandled server errors (fire-and-forget)
+    auditService.suspiciousActivity(req, req.user?.id, `Unhandled ${err.name}: ${err.message?.slice(0, 200)}`)
   } else {
     // Operational errors are expected — log at warn level
     logger.warn(
@@ -127,12 +132,13 @@ const errorHandler = (err, req, res, next) => {
         message: error.message,
         url: req.url,
         userId: req.user?.id,
+        requestId: req.id,
       },
       '⚠️  Operational error'
     )
   }
 
-  // ── Send response ────────────────────────────────────────────────────────
+  // ── Send response ──────────────────────────────────────────────────────────────────
   const statusCode = error.statusCode || HTTP.INTERNAL_ERROR
 
   res.status(statusCode).json({
@@ -140,6 +146,8 @@ const errorHandler = (err, req, res, next) => {
     statusCode,
     message: error.message,
     errors: error.errors?.length > 0 ? error.errors : undefined,
+    // Always include requestId — clients can report this to support for log correlation
+    requestId: req.id || undefined,
     // Only include stack trace in development
     ...(isDev && !error.isOperational && { stack: err.stack }),
   })

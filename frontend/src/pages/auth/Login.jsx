@@ -1,17 +1,67 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { FiMail, FiLock, FiEye, FiEyeOff, FiArrowRight } from 'react-icons/fi'
 import { FcGoogle } from 'react-icons/fc'
 import { IoRestaurantOutline } from 'react-icons/io5'
 import { toast } from 'react-hot-toast'
+import { useDispatch } from 'react-redux'
+import { checkAuthThunk } from '../../store/slices/authSlice.js'
 import { useAuth } from '../../hooks/useAuth.js'
+import { getDashboardRoute } from '../../utils/constants.js'
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
+  const dispatch = useDispatch()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
+  // Guard: ensure the OAuth callback is only processed once, even across re-renders.
+  // Without this, an unstable function reference in the dep array causes the effect
+  // to re-fire after every Redux state update, creating an infinite redirect loop.
+  const callbackProcessed = useRef(false)
+
+  const getRedirectPath = (role, fromParam) => {
+    if (fromParam && fromParam.startsWith('/')) return fromParam
+    return getDashboardRoute(role)
+  }
+
+  // Handle Google OAuth Callback Token in URL if present.
+  // Deps: only [searchParams] — all other refs (dispatch, navigate) are stable by spec.
+  // We intentionally exclude any hook-derived functions that are recreated each render.
+  useEffect(() => {
+    const token = searchParams.get('token')
+    const errorParam = searchParams.get('error')
+    const redirectParam = searchParams.get('redirect')
+
+    if (token) {
+      // Prevent re-execution if Redux state update causes a re-render before navigation
+      if (callbackProcessed.current) return
+      callbackProcessed.current = true
+
+      localStorage.setItem('accessToken', token)
+
+      // Use dispatch directly — it is a stable reference guaranteed by React-Redux.
+      // DO NOT use checkAuth() from useAuth() here: it is not memoized and recreates
+      // on every render, which would cause this effect to re-run infinitely.
+      dispatch(checkAuthThunk())
+        .unwrap()
+        .then((user) => {
+          toast.success(`Welcome back, ${user?.name || 'User'}!`)
+          const target = getRedirectPath(user?.role, redirectParam)
+          navigate(target, { replace: true })
+        })
+        .catch(() => {
+          callbackProcessed.current = false // allow retry if auth check fails
+          localStorage.removeItem('accessToken')
+          toast.error('Authentication verification failed.')
+        })
+    } else if (errorParam) {
+      toast.error(decodeURIComponent(errorParam))
+    }
+  }, [searchParams, dispatch, navigate])
 
   const {
     register,
@@ -21,34 +71,27 @@ export default function Login() {
 
   const onSubmit = async (data) => {
     setLoading(true)
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setLoading(false)
-
-    // Log the user in with mock data
-    const mockUser = {
-      name: data.email.split('@')[0].replace(/[^a-zA-Z]/g, ' '),
-      email: data.email,
-      role: 'customer',
+    try {
+      const res = await login({ email: data.email, password: data.password })
+      const userObj = res?.user || res
+      const redirectParam = searchParams.get('redirect')
+      toast.success(`Welcome back, ${userObj?.name || 'User'}!`)
+      const targetPath = getRedirectPath(userObj?.role, redirectParam)
+      navigate(targetPath)
+    } catch (err) {
+      toast.error(err || 'Login failed. Please check your credentials.')
+    } finally {
+      setLoading(false)
     }
-
-    login(mockUser)
-    toast.success(`Welcome back, ${mockUser.name || 'User'}!`)
-    navigate('/')
   }
 
   const handleGoogleLogin = () => {
-    toast.success('Google login simulation successful!')
-    login({
-      name: 'Google User',
-      email: 'user@google.com',
-      role: 'customer',
-    })
-    navigate('/')
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+    window.location.href = `${apiBase}/auth/google`
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl w-full bg-white rounded-3xl shadow-card overflow-hidden grid md:grid-cols-2 min-h-[600px] border border-gray-100">
         
         {/* Left Side: Premium Aesthetic Panel */}

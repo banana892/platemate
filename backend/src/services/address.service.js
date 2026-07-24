@@ -3,25 +3,68 @@ import { ApiError } from '../utils/ApiError.js'
 import { MSG } from '../constants/messages.js'
 import { HTTP } from '../constants/httpStatus.js'
 
+const invalidateAddressCache = async (userId) => {
+  try {
+    const { deleteCache } = await import('../redis/redis.service.js')
+    const { CACHE_KEYS } = await import('../redis/cache.constants.js')
+    await deleteCache(CACHE_KEYS.ADDRESSES(userId))
+  } catch (err) {}
+}
+
+const formatAddressOutput = (addr) => ({
+  id: addr.id,
+  userId: addr.userId,
+  label: addr.label,
+  type: addr.type,
+  recipientName: addr.recipientName,
+  phone: addr.phone,
+  houseNumber: addr.houseNumber,
+  formattedAddress: addr.formattedAddress,
+  street: addr.street || addr.formattedAddress || addr.houseNumber || '',
+  landmark: addr.landmark,
+  city: addr.city,
+  state: addr.state,
+  country: addr.country,
+  postalCode: addr.postalCode,
+  latitude: Number(addr.latitude),
+  longitude: Number(addr.longitude),
+  isDefault: addr.isDefault,
+  createdAt: addr.createdAt,
+  updatedAt: addr.updatedAt,
+})
+
 /**
  * Retrieve all addresses for a user
  */
 export const getAddresses = async (userId) => {
+  const { getCache, setCache } = await import('../redis/redis.service.js')
+  const { CACHE_KEYS, CACHE_TTLS } = await import('../redis/cache.constants.js')
+
+  const cacheKey = CACHE_KEYS.ADDRESSES(userId)
+  const cached = await getCache(cacheKey)
+  if (cached) return cached
+
   const addresses = await addressRepo.findAddressesByUserId(userId)
-  return addresses.map((addr) => ({
-    id: addr.id,
-    label: addr.label,
-    type: addr.type,
-    street: addr.street,
-    landmark: addr.landmark,
-    city: addr.city,
-    state: addr.state,
-    country: addr.country,
-    postalCode: addr.postalCode,
-    latitude: Number(addr.latitude),
-    longitude: Number(addr.longitude),
-    isDefault: addr.isDefault,
-  }))
+  const result = addresses.map(formatAddressOutput)
+
+  await setCache(cacheKey, result, CACHE_TTLS.ADDRESSES)
+  return result
+}
+
+/**
+ * Retrieve a single address by ID
+ */
+export const getAddressById = async (userId, addressId) => {
+  const address = await addressRepo.findAddressById(addressId)
+  if (!address) {
+    throw new ApiError(HTTP.NOT_FOUND, MSG.ADDRESS_NOT_FOUND)
+  }
+
+  if (address.userId !== userId) {
+    throw new ApiError(HTTP.FORBIDDEN, MSG.FORBIDDEN)
+  }
+
+  return formatAddressOutput(address)
 }
 
 /**
@@ -29,20 +72,8 @@ export const getAddresses = async (userId) => {
  */
 export const createAddress = async (userId, data) => {
   const address = await addressRepo.createAddress(userId, data)
-  return {
-    id: address.id,
-    label: address.label,
-    type: address.type,
-    street: address.street,
-    landmark: address.landmark,
-    city: address.city,
-    state: address.state,
-    country: address.country,
-    postalCode: address.postalCode,
-    latitude: Number(address.latitude),
-    longitude: Number(address.longitude),
-    isDefault: address.isDefault,
-  }
+  await invalidateAddressCache(userId)
+  return formatAddressOutput(address)
 }
 
 /**
@@ -59,20 +90,26 @@ export const updateAddress = async (userId, addressId, data) => {
   }
 
   const updated = await addressRepo.updateAddress(addressId, userId, data)
-  return {
-    id: updated.id,
-    label: updated.label,
-    type: updated.type,
-    street: updated.street,
-    landmark: updated.landmark,
-    city: updated.city,
-    state: updated.state,
-    country: updated.country,
-    postalCode: updated.postalCode,
-    latitude: Number(updated.latitude),
-    longitude: Number(updated.longitude),
-    isDefault: updated.isDefault,
+  await invalidateAddressCache(userId)
+  return formatAddressOutput(updated)
+}
+
+/**
+ * Set an address as default
+ */
+export const setDefaultAddress = async (userId, addressId) => {
+  const address = await addressRepo.findAddressById(addressId)
+  if (!address) {
+    throw new ApiError(HTTP.NOT_FOUND, MSG.ADDRESS_NOT_FOUND)
   }
+
+  if (address.userId !== userId) {
+    throw new ApiError(HTTP.FORBIDDEN, MSG.FORBIDDEN)
+  }
+
+  const updated = await addressRepo.setDefaultAddress(addressId, userId)
+  await invalidateAddressCache(userId)
+  return formatAddressOutput(updated)
 }
 
 /**
@@ -89,5 +126,7 @@ export const deleteAddress = async (userId, addressId) => {
   }
 
   await addressRepo.deleteAddress(addressId)
+  await invalidateAddressCache(userId)
   return { id: addressId }
 }
+

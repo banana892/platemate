@@ -1,4 +1,5 @@
 import { createSlice } from '@reduxjs/toolkit'
+import { logout } from './authSlice.js'
 
 const loadCartFromStorage = () => {
   try {
@@ -17,6 +18,7 @@ const saveCartToStorage = (cart) => {
   }
 }
 
+const defaultCartState = { items: [], restaurantId: null, restaurantName: '' }
 const initialState = loadCartFromStorage()
 
 const cartSlice = createSlice({
@@ -84,6 +86,12 @@ const cartSlice = createSlice({
       state.coupon = null
       saveCartToStorage(state)
     },
+  },
+  extraReducers: (builder) => {
+    builder.addCase(logout, () => {
+      localStorage.removeItem('platemate_cart')
+      return defaultCartState
+    })
   },
 })
 

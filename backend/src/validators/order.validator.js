@@ -11,10 +11,16 @@ const coerceNumber = z.preprocess(
   z.number().optional()
 )
 
+const itemSchema = z.object({
+  menuItemId: z.union([z.string(), z.number()]),
+  quantity: z.number().int().min(1),
+})
+
 export const checkoutValidateSchema = z.object({
   body: z.object({
     addressId: z.string().uuid('Invalid address ID format'),
     couponCode: z.string().trim().optional().or(z.literal('')),
+    items: z.array(itemSchema).optional(),
   }),
 })
 
@@ -23,6 +29,7 @@ export const createOrderSchema = z.object({
     addressId: z.string().uuid('Invalid address ID format'),
     couponCode: z.string().trim().optional().or(z.literal('')),
     notes: z.string().trim().max(500).optional().or(z.literal('')),
+    items: z.array(itemSchema).optional(),
   }),
 })
 

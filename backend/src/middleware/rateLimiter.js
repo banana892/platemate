@@ -26,6 +26,7 @@
 import rateLimit from 'express-rate-limit'
 import { HTTP } from '../constants/httpStatus.js'
 import { MSG } from '../constants/messages.js'
+import { SECURITY_CONFIG } from '../security/security.config.js'
 
 // ── General API limiter ────────────────────────────────────────────────────────
 export const generalLimiter = rateLimit({
@@ -77,5 +78,35 @@ export const uploadLimiter = rateLimit({
     success: false,
     statusCode: HTTP.TOO_MANY_REQUESTS,
     message: 'Upload limit reached. Please try again later.',
+  },
+})
+
+// ── Payment verification limiter (Phase 13) ────────────────────────────────────────────────
+// Payment verification is a high-value endpoint — brute-forcing signature
+// parameters could allow fraudulent payment captures.
+export const paymentVerifyLimiter = rateLimit({
+  windowMs: SECURITY_CONFIG.rateLimit.paymentVerify.windowMs,
+  max: SECURITY_CONFIG.rateLimit.paymentVerify.max,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: {
+    success: false,
+    statusCode: HTTP.TOO_MANY_REQUESTS,
+    message: SECURITY_CONFIG.rateLimit.paymentVerify.message,
+  },
+})
+
+// ── Webhook limiter (Phase 13) ────────────────────────────────────────────────────────────────
+// Webhooks arrive at high volume from Razorpay. This limit protects against
+// replay attacks without blocking legitimate high-frequency events.
+export const webhookLimiter = rateLimit({
+  windowMs: SECURITY_CONFIG.rateLimit.webhook.windowMs,
+  max: SECURITY_CONFIG.rateLimit.webhook.max,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: {
+    success: false,
+    statusCode: HTTP.TOO_MANY_REQUESTS,
+    message: SECURITY_CONFIG.rateLimit.webhook.message,
   },
 })

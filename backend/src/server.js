@@ -32,7 +32,9 @@ import prisma from './config/db.js'
 // ── Create HTTP Server ────────────────────────────────────────────────────────
 // We create an http.Server wrapping the Express app.
 // This allows Socket.io (Phase 9) to attach to the same server.
+import { initSocket } from './socket/socket.server.js'
 const server = http.createServer(app)
+initSocket(server)
 
 // ── Start Server ──────────────────────────────────────────────────────────────
 const startServer = async () => {
@@ -52,7 +54,7 @@ const startServer = async () => {
     }
 
     // ── Start listening ────────────────────────────────────────────────────
-    server.listen(env.PORT, () => {
+    server.listen(env.PORT, '0.0.0.0', () => {
       logger.info(`
       ╔═══════════════════════════════════════════════╗
       ║          🍽️  PlateMate API — RUNNING           ║
@@ -63,6 +65,19 @@ const startServer = async () => {
       ║  Health      : http://localhost:${env.PORT}/api/v1/health║
       ╚═══════════════════════════════════════════════╝
       `)
+
+      // Warm up Redis caches in background
+      if (env.NODE_ENV !== 'test') {
+        import('./redis/redis.service.js')
+          .then(async ({ warmupPlatformSettings, warmupAllRestaurants }) => {
+            logger.info('Warming up platform caches...')
+            await warmupPlatformSettings()
+            await warmupAllRestaurants()
+          })
+          .catch((err) => {
+            logger.warn({ err: err.message }, 'Failed to warm up platform caches on startup')
+          })
+      }
     })
   } catch (error) {
     logger.fatal({ err: error }, 'Failed to start server')

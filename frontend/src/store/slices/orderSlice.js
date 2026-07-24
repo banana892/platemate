@@ -1,4 +1,5 @@
 import { createSlice } from '@reduxjs/toolkit'
+import { logout } from './authSlice.js'
 
 const initialState = {
   orders: [],
@@ -31,6 +32,9 @@ const orderSlice = createSlice({
     setLoading(state, action) {
       state.isLoading = action.payload
     },
+  },
+  extraReducers: (builder) => {
+    builder.addCase(logout, () => initialState)
   },
 })
 

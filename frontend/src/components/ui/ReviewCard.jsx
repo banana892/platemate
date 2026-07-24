@@ -1,5 +1,5 @@
 import { FiStar } from 'react-icons/fi'
-import Rating from './Rating.jsx'
+
 import { formatRelativeTime } from '../../utils/formatters.js'
 
 export default function ReviewCard({ review }) {

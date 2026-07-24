@@ -32,6 +32,10 @@ import { ApiError } from '../utils/ApiError.js'
 import { MSG } from '../constants/messages.js'
 import { HTTP } from '../constants/httpStatus.js'
 import logger from '../config/logger.js'
+import { env } from '../config/env.js'
+import * as securityService from '../security/security.service.js'
+import * as auditService from '../security/audit.service.js'
+import * as passwordService from '../security/password.service.js'
 
 // ── Helper: Build token pair ─────────────────────────────────────────────────
 
@@ -190,15 +194,41 @@ export const resendVerification = async (email) => {
  * Authenticate a user with email and password
  * @param {string} email
  * @param {string} password
- * @param {object} meta - { ip, userAgent } for device tracking
+ * @param {object} meta - { ip, userAgent, req } for device tracking and audit logging
  * @returns {{ user: object, accessToken: string, refreshToken: string }}
  */
 export const login = async (email, password, meta = {}) => {
+  const { req } = meta
+
+  // ── 1. Check login lockout BEFORE any DB work ────────────────────────────
+  // Prevents brute-force even before we hit the database.
+  const lockout = await securityService.checkLoginLockout(email)
+  if (lockout.locked) {
+    // Log lockout check (account is already locked — not a new lockout)
+    auditService.logAuditEvent({
+      requestId: req?.id,
+      action: 'ACCOUNT_LOCKED',
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+      meta: { email, reason: 'Login blocked: account locked', remainingSeconds: lockout.remainingSeconds },
+    })
+    throw new ApiError(HTTP.TOO_MANY_REQUESTS, MSG.ACCOUNT_LOCKED)
+  }
+
   const user = await authRepo.findUserByEmail(email)
 
   // Use the same error for both "user not found" and "wrong password"
   // to prevent user enumeration
   if (!user || user.deletedAt) {
+    // Record failure even for non-existent emails (prevents enumeration via timing)
+    await securityService.recordLoginFailure(email)
+    auditService.logAuditEvent({
+      requestId: req?.id,
+      action: 'LOGIN_FAILURE',
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+      meta: { email, reason: 'User not found' },
+    })
     throw new ApiError(HTTP.UNAUTHORIZED, MSG.INVALID_CREDENTIALS)
   }
 
@@ -215,8 +245,45 @@ export const login = async (email, password, meta = {}) => {
   // Verify password
   const isPasswordValid = await comparePassword(password, user.password)
   if (!isPasswordValid) {
+    // Record failure and check if this just triggered a lock
+    const { justLocked } = await securityService.recordLoginFailure(email)
+
+    if (justLocked) {
+      auditService.logAuditEvent({
+        requestId: req?.id,
+        userId: user.id,
+        action: 'ACCOUNT_LOCKED',
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+        meta: { email, reason: 'Max login failures reached' },
+      })
+    } else {
+      auditService.logAuditEvent({
+        requestId: req?.id,
+        userId: user.id,
+        action: 'LOGIN_FAILURE',
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+        meta: { email, reason: 'Invalid password' },
+      })
+    }
+
     throw new ApiError(HTTP.UNAUTHORIZED, MSG.INVALID_CREDENTIALS)
   }
+
+  // ── Successful login ─────────────────────────────────────────────────────
+  // Clear the failure counter so the next lockout window starts fresh.
+  await securityService.clearLoginAttempts(email)
+
+  // Audit successful login
+  auditService.logAuditEvent({
+    requestId: req?.id,
+    userId: user.id,
+    action: 'LOGIN_SUCCESS',
+    ip: meta.ip,
+    userAgent: meta.userAgent,
+    meta: { email },
+  })
 
   // Issue token pair
   const { accessToken, refreshToken } = await issueTokenPair(user, meta)
@@ -292,8 +359,9 @@ export const refresh = async (rawRefreshToken, meta = {}) => {
 /**
  * Revoke the current refresh token (single device logout)
  * @param {string} rawRefreshToken - The raw refresh token from the cookie
+ * @param {object} [meta] - { req } for audit logging
  */
-export const logout = async (rawRefreshToken) => {
+export const logout = async (rawRefreshToken, meta = {}) => {
   if (!rawRefreshToken) return // Nothing to revoke
 
   const hashedToken = hashToken(rawRefreshToken)
@@ -301,6 +369,15 @@ export const logout = async (rawRefreshToken) => {
 
   if (tokenRecord) {
     await authRepo.revokeRefreshToken(tokenRecord.id)
+
+    // Audit token revocation
+    auditService.logAuditEvent({
+      requestId: meta.req?.id,
+      userId: tokenRecord.userId,
+      action: 'LOGOUT',
+      ip: meta.req?.ip,
+      userAgent: meta.req?.headers?.['user-agent'],
+    })
   }
 }
 
@@ -309,10 +386,21 @@ export const logout = async (rawRefreshToken) => {
 /**
  * Revoke ALL refresh tokens for a user (all devices)
  * @param {string} userId
+ * @param {object} [meta] - { req } for audit logging
  */
-export const logoutAll = async (userId) => {
+export const logoutAll = async (userId, meta = {}) => {
   await authRepo.revokeAllUserRefreshTokens(userId)
   await authRepo.updateUser(userId, { tokenVersion: { increment: 1 } })
+
+  // Audit token revocation for all sessions
+  auditService.logAuditEvent({
+    requestId: meta.req?.id,
+    userId,
+    action: 'TOKEN_REVOKED',
+    ip: meta.req?.ip,
+    userAgent: meta.req?.headers?.['user-agent'],
+    meta: { reason: 'Logout all devices' },
+  })
 }
 
 // ── Get Current User ─────────────────────────────────────────────────────────
@@ -410,12 +498,13 @@ export const resetPassword = async (token, newPassword) => {
 
 /**
  * Change password for an authenticated user
- * Requires current password verification. Revokes all sessions.
+ * Requires current password verification. Checks password history. Revokes all sessions.
  * @param {string} userId
  * @param {string} currentPassword
  * @param {string} newPassword
+ * @param {object} [meta] - { req } for audit logging
  */
-export const changePassword = async (userId, currentPassword, newPassword) => {
+export const changePassword = async (userId, currentPassword, newPassword, meta = {}) => {
   // Fetch user with password for verification
   const user = await authRepo.findUserById(userId)
 
@@ -432,6 +521,15 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
     throw new ApiError(HTTP.UNAUTHORIZED, MSG.INVALID_CREDENTIALS)
   }
 
+  // Check password history (prevent reuse of last N passwords)
+  const isReused = await passwordService.isPasswordReused(userId, newPassword)
+  if (isReused) {
+    throw new ApiError(
+      HTTP.BAD_REQUEST,
+      `You cannot reuse any of your last ${5} passwords. Please choose a different password.`
+    )
+  }
+
   // Hash new password
   const hashedPassword = await hashPassword(newPassword)
 
@@ -441,11 +539,169 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
     tokenVersion: { increment: 1 },
   })
 
+  // Save to password history (fire-and-forget, non-blocking)
+  passwordService.savePasswordHistory(userId, hashedPassword)
+
   // Revoke all refresh tokens — force re-login everywhere
   await authRepo.revokeAllUserRefreshTokens(userId)
+
+  // Audit password change
+  auditService.logAuditEvent({
+    requestId: meta.req?.id,
+    userId,
+    action: 'PASSWORD_CHANGED',
+    ip: meta.req?.ip,
+    userAgent: meta.req?.headers?.['user-agent'],
+  })
 
   // Send confirmation email
   sendPasswordChangedEmail(user.email, user.name).catch((err) => {
     logger.error({ err, userId }, 'Failed to send password changed email')
   })
 }
+
+// ── Google Login ─────────────────────────────────────────────────────────────
+
+/**
+ * Authenticate or register a user via Google OAuth (ID token or Authorization code)
+ * @param {object} payload - { idToken, credential, code }
+ * @param {object} meta - { ip, userAgent, req }
+ * @returns {{ user: object, accessToken: string, refreshToken: string }}
+ */
+export const loginWithGoogle = async (payload, meta = {}) => {
+  const { idToken, credential, code, role: requestedRole } = payload
+  const tokenToVerify = idToken || credential
+
+  let googleUser = null
+
+  if (tokenToVerify) {
+    try {
+      const response = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(tokenToVerify)}`
+      )
+      if (!response.ok) {
+        throw new Error('Invalid Google token response')
+      }
+      const data = await response.json()
+      if (!data.email) {
+        throw new Error('No email found in Google token')
+      }
+      googleUser = {
+        email: data.email,
+        name: data.name || data.email.split('@')[0],
+        picture: data.picture || null,
+        email_verified: data.email_verified === true || data.email_verified === 'true',
+      }
+    } catch (err) {
+      logger.error({ err }, 'Google ID Token verification failed')
+      throw new ApiError(HTTP.UNAUTHORIZED, 'Failed to verify Google token with Google servers.')
+    }
+  } else if (code) {
+    try {
+      const tokenUrl = 'https://oauth2.googleapis.com/token'
+      const params = new URLSearchParams({
+        code,
+        client_id: env.GOOGLE_CLIENT_ID,
+        client_secret: env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: env.GOOGLE_CALLBACK_URL,
+        grant_type: 'authorization_code',
+      })
+
+      const res = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      })
+
+      const tokenData = await res.json()
+      if (!tokenData.id_token) {
+        throw new Error(tokenData.error_description || 'Failed to exchange authorization code')
+      }
+
+      const infoRes = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(tokenData.id_token)}`
+      )
+      const info = await infoRes.json()
+      googleUser = {
+        email: info.email,
+        name: info.name || info.email.split('@')[0],
+        picture: info.picture || null,
+        email_verified: info.email_verified === true || info.email_verified === 'true',
+      }
+    } catch (err) {
+      logger.error({ err }, 'Google OAuth code exchange failed')
+      throw new ApiError(HTTP.UNAUTHORIZED, 'Failed to authenticate code with Google.')
+    }
+  } else {
+    throw new ApiError(HTTP.BAD_REQUEST, 'Missing Google credential or code.')
+  }
+
+  const { email, name, picture } = googleUser
+
+  // Normalize requested role if provided
+  let targetRole = 'CUSTOMER'
+  if (requestedRole) {
+    const uppercaseRole = requestedRole.toUpperCase()
+    if (uppercaseRole === 'RESTAURANT' || uppercaseRole === 'PARTNER') {
+      targetRole = 'PARTNER'
+    } else if (uppercaseRole === 'DELIVERY' || uppercaseRole === 'RIDER') {
+      targetRole = 'RIDER'
+    } else if (uppercaseRole === 'CUSTOMER') {
+      targetRole = 'CUSTOMER'
+    }
+  }
+
+  let user = await authRepo.findUserByEmail(email)
+
+  if (user) {
+    if (user.deletedAt) {
+      throw new ApiError(HTTP.UNAUTHORIZED, MSG.INVALID_CREDENTIALS)
+    }
+    if (!user.isActive) {
+      throw new ApiError(HTTP.FORBIDDEN, MSG.ACCOUNT_SUSPENDED)
+    }
+    // If a specific role was requested during registration, check for role conflict
+    if (requestedRole && user.role !== targetRole) {
+      throw new ApiError(
+        HTTP.CONFLICT,
+        `Google account already registered as ${user.role}. Cannot register again as ${targetRole} using the same email.`
+      )
+    }
+    if (!user.isVerified || (picture && !user.avatar)) {
+      user = await authRepo.updateUser(user.id, {
+        isVerified: true,
+        ...(picture && !user.avatar ? { avatar: picture } : {}),
+      })
+    }
+  } else {
+    const dummyPassword = await hashPassword(generateRandomToken())
+    user = await authRepo.createUser({
+      name,
+      email,
+      password: dummyPassword,
+      avatar: picture,
+      role: targetRole,
+    })
+    user = await authRepo.updateUser(user.id, { isVerified: true })
+  }
+
+
+  auditService.logAuditEvent({
+    requestId: meta.req?.id,
+    userId: user.id,
+    action: 'LOGIN_SUCCESS',
+    ip: meta.ip,
+    userAgent: meta.userAgent,
+    meta: { email, provider: 'google' },
+  })
+
+  const { accessToken, refreshToken } = await issueTokenPair(user, meta)
+  const { password: _, ...userWithoutPassword } = user
+
+  return {
+    user: userWithoutPassword,
+    accessToken,
+    refreshToken,
+  }
+}
+

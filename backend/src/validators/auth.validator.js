@@ -51,7 +51,17 @@ export const registerSchema = z.object({
       .regex(/^\+?[1-9]\d{6,14}$/, 'Please provide a valid phone number')
       .optional()
       .or(z.literal('')),
-    role: z.enum(['CUSTOMER', 'PARTNER', 'RIDER']).optional(),
+    role: z
+      .preprocess((val) => {
+        if (typeof val === 'string') {
+          const u = val.toUpperCase()
+          if (u === 'RESTAURANT' || u === 'PARTNER') return 'PARTNER'
+          if (u === 'DELIVERY' || u === 'RIDER') return 'RIDER'
+          if (u === 'CUSTOMER') return 'CUSTOMER'
+        }
+        return val
+      }, z.enum(['CUSTOMER', 'PARTNER', 'RIDER']))
+      .optional(),
   }),
 })
 
@@ -117,3 +127,27 @@ export const changePasswordSchema = z.object({
     newPassword: passwordSchema,
   }),
 })
+
+// ── Google Verify ─────────────────────────────────────────────────────────────
+
+export const googleVerifySchema = z.object({
+  body: z.object({
+    idToken: z.string().optional(),
+    credential: z.string().optional(),
+    code: z.string().optional(),
+    role: z
+      .preprocess((val) => {
+        if (typeof val === 'string') {
+          const u = val.toUpperCase()
+          if (u === 'RESTAURANT' || u === 'PARTNER') return 'PARTNER'
+          if (u === 'DELIVERY' || u === 'RIDER') return 'RIDER'
+          if (u === 'CUSTOMER') return 'CUSTOMER'
+          if (u === 'ADMIN') return 'ADMIN'
+        }
+        return val
+      }, z.enum(['CUSTOMER', 'PARTNER', 'RIDER', 'ADMIN']))
+      .optional(),
+  }),
+})
+
+

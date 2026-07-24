@@ -59,7 +59,7 @@ export const generateRefreshToken = (payload) => {
  * These use the access secret since they're one-time-use
  */
 export const generateEmailToken = (payload, expiresIn = env.EMAIL_VERIFY_EXPIRES) => {
-  return jwt.sign(payload, env.JWT_ACCESS_SECRET, { expiresIn })
+  return jwt.sign(payload, env.JWT_ACCESS_SECRET, { expiresIn, issuer: 'platemate' })
 }
 
 // ── Token Verification ────────────────────────────────────────────────────────

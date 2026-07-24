@@ -1,5 +1,7 @@
 import { HTTP } from '../constants/httpStatus.js'
 import * as partnerService from '../services/partner.service.js'
+import * as mediaService from '../services/media.service.js'
+import { ApiError } from '../utils/ApiError.js'
 import asyncHandler from '../middleware/asyncHandler.js'
 
 // ── Dashboard ───────────────────────────────────────────────────────────────
@@ -254,5 +256,49 @@ export const markNotificationRead = asyncHandler(async (req, res) => {
     success: true,
     message: 'Notification marked as read',
     data: { id: result.id },
+  })
+})
+
+export const updateRestaurantLogo = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    throw new ApiError(HTTP.BAD_REQUEST, 'No file provided for logo.')
+  }
+
+  const result = await mediaService.updateRestaurantLogo(req.user.id, req.restaurantId, req.file.buffer)
+
+  res.status(HTTP.OK).json({
+    success: true,
+    message: 'Restaurant logo updated successfully.',
+    data: result,
+  })
+})
+
+export const updateRestaurantBanner = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    throw new ApiError(HTTP.BAD_REQUEST, 'No file provided for banner.')
+  }
+
+  const result = await mediaService.updateRestaurantBanner(req.user.id, req.restaurantId, req.file.buffer)
+
+  res.status(HTTP.OK).json({
+    success: true,
+    message: 'Restaurant banner updated successfully.',
+    data: result,
+  })
+})
+
+export const updateMenuItemImage = asyncHandler(async (req, res) => {
+  const { id } = req.params
+
+  if (!req.file) {
+    throw new ApiError(HTTP.BAD_REQUEST, 'No file provided for menu item image.')
+  }
+
+  const result = await mediaService.updateMenuItemImage(req.user.id, id, req.file.buffer)
+
+  res.status(HTTP.OK).json({
+    success: true,
+    message: 'Menu item image updated successfully.',
+    data: result,
   })
 })

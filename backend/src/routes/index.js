@@ -29,6 +29,9 @@ import checkoutRoutes from './checkout.routes.js'
 import orderRoutes from './order.routes.js'
 import searchRoutes from './search.routes.js'
 import partnerRoutes from './partner.routes.js'
+import riderRoutes from './rider.routes.js'
+import adminRoutes from './admin.routes.js'
+import { paymentRouter, adminPaymentRouter } from './payment.routes.js'
 
 const router = Router()
 
@@ -71,12 +74,17 @@ router.use('/search', searchRoutes)
 router.use('/partner', partnerRoutes)
 
 // Phase 7 — Rider APIs
-// router.use('/rider', riderRoutes)
+router.use('/rider', riderRoutes)
 
 // Phase 8 — Admin APIs
-// router.use('/admin', adminRoutes)
+router.use('/admin', adminRoutes)
 
 // Phase 10 — Payments
-// router.use('/payments', paymentRoutes)
+router.use('/payments', paymentRouter)
+router.use('/admin/payments', adminPaymentRouter)
+
+// Phase 12 — Media & File Management
+import mediaRoutes from './media.routes.js'
+router.use('/media', mediaRoutes)
 
 export default router

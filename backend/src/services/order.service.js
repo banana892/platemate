@@ -5,6 +5,9 @@ import * as checkoutService from './checkout.service.js'
 import { ApiError } from '../utils/ApiError.js'
 import { MSG } from '../constants/messages.js'
 import { HTTP } from '../constants/httpStatus.js'
+import prisma from '../config/db.js'
+import { emitToRestaurant, emitToUser } from '../socket/socket.events.js'
+import { EVENTS } from '../socket/socket.constants.js'
 
 /**
  * Generate a unique order number (PM-YYYYMMDD-XXXXX)
@@ -19,13 +22,13 @@ const generateOrderNumber = () => {
 /**
  * Create a completed order from the user's cart
  */
-export const createOrder = async (userId, { addressId, couponCode, notes }) => {
+export const createOrder = async (userId, { addressId, couponCode, notes, items }) => {
   // 1. Run checkout validations (this throws if range, min order, items, or restaurant is invalid)
-  const validation = await checkoutService.validateCheckout(userId, { addressId, couponCode })
+  const validation = await checkoutService.validateCheckout(userId, { addressId, couponCode, items })
 
   // 2. Fetch the current cart to retrieve items
   const cart = await cartRepo.findCartByUserId(userId)
-  if (!cart) {
+  if (!cart || cart.items.length === 0) {
     throw new ApiError(HTTP.BAD_REQUEST, MSG.CART_EMPTY)
   }
 
@@ -66,6 +69,26 @@ export const createOrder = async (userId, { addressId, couponCode, notes }) => {
 
   // 6. Execute transaction-safe order creation
   const order = await orderRepo.createOrder(orderData, orderItemsData, cart.id)
+
+  // 7. Real-time Events
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } })
+  emitToRestaurant(cart.restaurantId, EVENTS.RESTAURANT_NEW_ORDER, {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    customerName: user?.name || 'Customer',
+    totalAmount: Number(order.totalAmount),
+    status: order.status,
+    createdAt: order.createdAt,
+  })
+
+  emitToUser(userId, EVENTS.ORDER_CREATED, {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    restaurantName: order.restaurant.name,
+    totalAmount: Number(order.totalAmount),
+    status: order.status,
+    createdAt: order.createdAt,
+  })
 
   return {
     id: order.id,

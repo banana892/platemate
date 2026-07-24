@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { FiUser, FiMail, FiPhone, FiLock, FiEye, FiEyeOff, FiArrowRight } from 'react-icons/fi'
+import { FcGoogle } from 'react-icons/fc'
 import { IoRestaurantOutline, IoBicycleOutline, IoFastFoodOutline } from 'react-icons/io5'
 import { toast } from 'react-hot-toast'
 import { useAuth } from '../../hooks/useAuth.js'
@@ -12,8 +13,23 @@ export default function Signup() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [selectedRole, setSelectedRole] = useState(USER_ROLES.CUSTOMER)
-  const { login } = useAuth()
+  const { register: registerAuth } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
+  useEffect(() => {
+    const errorParam = searchParams.get('error')
+    if (errorParam) {
+      toast.error(decodeURIComponent(errorParam))
+    }
+  }, [searchParams])
+
+  const handleGoogleSignup = () => {
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+    const targetRole = selectedRole || 'CUSTOMER'
+    window.location.href = `${apiBase}/auth/google?role=${targetRole}&intent=signup`
+  }
+
 
   const {
     register,
@@ -34,28 +50,24 @@ export default function Signup() {
 
   const onSubmit = async (data) => {
     setLoading(true)
-    // Simulate API registration call
-    await new Promise((resolve) => setTimeout(resolve, 1200))
-    setLoading(false)
+    try {
+      const targetRole = selectedRole || 'CUSTOMER'
 
-    // Log the user in with mock data
-    const mockUser = {
-      name: data.fullName,
-      email: data.email,
-      phone: data.phone,
-      role: selectedRole,
-    }
+      await registerAuth({
+        fullName: data.fullName,
+        name: data.fullName,
+        email: data.email,
+        phone: data.phone,
+        password: data.password,
+        role: targetRole,
+      })
 
-    login(mockUser)
-    toast.success(`Welcome to PlateMate, ${mockUser.name}!`)
-    
-    // Redirect based on role
-    if (selectedRole === USER_ROLES.RESTAURANT) {
-      navigate('/restaurant/dashboard')
-    } else if (selectedRole === USER_ROLES.DELIVERY) {
-      navigate('/delivery/dashboard')
-    } else {
-      navigate('/')
+      toast.success(`Account created successfully! Please sign in.`)
+      navigate('/login')
+    } catch (err) {
+      toast.error(err || 'Registration failed. Please try again.')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -67,13 +79,13 @@ export default function Signup() {
       icon: IoFastFoodOutline,
     },
     {
-      id: USER_ROLES.RESTAURANT,
+      id: USER_ROLES.PARTNER,
       title: 'Partner',
       description: 'List your restaurant',
       icon: IoRestaurantOutline,
     },
     {
-      id: USER_ROLES.DELIVERY,
+      id: USER_ROLES.RIDER,
       title: 'Rider',
       description: 'Earn with delivery',
       icon: IoBicycleOutline,
@@ -81,7 +93,7 @@ export default function Signup() {
   ]
 
   return (
-    <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl w-full bg-white rounded-3xl shadow-card overflow-hidden grid md:grid-cols-2 min-h-[650px] border border-gray-100 animate-scale-in">
         
         {/* Left Side: Premium Aesthetic Panel */}
@@ -226,8 +238,8 @@ export default function Signup() {
                   {...register('phone', {
                     required: 'Phone number is required',
                     pattern: {
-                      value: /^[0-9]{10}$/,
-                      message: 'Please enter a valid 10-digit phone number',
+                      value: /^[0-9]{10,15}$/,
+                      message: 'Please enter a valid phone number',
                     },
                   })}
                   className={`block w-full pl-11 pr-4 py-2.5 bg-gray-50 border ${
@@ -258,8 +270,16 @@ export default function Signup() {
                     {...register('password', {
                       required: 'Password is required',
                       minLength: {
-                        value: 6,
-                        message: 'Must be at least 6 chars',
+                        value: 8,
+                        message: 'Must be at least 8 characters',
+                      },
+                      validate: {
+                        hasUppercase: (v) => /[A-Z]/.test(v) || 'Must contain at least 1 uppercase letter (A-Z)',
+                        hasLowercase: (v) => /[a-z]/.test(v) || 'Must contain at least 1 lowercase letter (a-z)',
+                        hasNumber: (v) => /[0-9]/.test(v) || 'Must contain at least 1 number (0-9)',
+                        hasSpecial: (v) =>
+                          /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(v) ||
+                          'Must contain at least 1 special character (e.g. !@#$%)',
                       },
                     })}
                     className={`block w-full pl-11 pr-10 py-2.5 bg-gray-50 border ${
@@ -274,8 +294,10 @@ export default function Signup() {
                     {showPassword ? <FiEyeOff className="text-base" /> : <FiEye className="text-base" />}
                   </button>
                 </div>
-                {errors.password && (
+                {errors.password ? (
                   <p className="mt-1 text-xs text-red-500 font-medium">{errors.password.message}</p>
+                ) : (
+                  <p className="mt-1 text-[10px] text-gray-400">Min 8 chars: A-Z, a-z, 0-9, special char</p>
                 )}
               </div>
 
@@ -350,7 +372,25 @@ export default function Signup() {
                 </>
               )}
             </button>
+
+            {/* Social Login Divider */}
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-gray-200"></div>
+              <span className="flex-shrink mx-4 text-gray-400 text-xs font-semibold uppercase">Or continue with</span>
+              <div className="flex-grow border-t border-gray-200"></div>
+            </div>
+
+            {/* Google Signup Button */}
+            <button
+              type="button"
+              onClick={handleGoogleSignup}
+              className="w-full bg-white border border-gray-200 text-gray-700 py-3 px-4 rounded-xl font-semibold flex items-center justify-center gap-3 hover:bg-gray-50 transition-smooth hover:border-gray-300 text-[0.95rem] cursor-pointer"
+            >
+              <FcGoogle className="text-xl" />
+              <span>Continue with Google</span>
+            </button>
           </form>
+
 
           {/* Footer Text */}
           <div className="mt-6 text-center text-sm text-gray-600 font-medium">

@@ -49,6 +49,21 @@ export const authenticate = asyncHandler(async (req, res, next) => {
   // verifyAccessToken throws ApiError if invalid/expired
   const payload = verifyAccessToken(token)
 
+  // Redis Blacklist Check (Hashed signature comparison)
+  try {
+    const crypto = await import('crypto')
+    const { isTokenBlacklisted } = await import('../redis/redis.service.js')
+    const signature = token.split('.')[2] || token
+    const tokenIdentifier = crypto.default.createHash('sha256').update(signature).digest('hex')
+    const isRevoked = await isTokenBlacklisted(tokenIdentifier)
+    if (isRevoked) {
+      throw new ApiError(401, MSG.TOKEN_EXPIRED)
+    }
+  } catch (err) {
+    if (err instanceof ApiError) throw err
+    // Graceful fallback if Redis service throws
+  }
+
   // ── 3. Look up the user in the database ───────────────────────────────
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },

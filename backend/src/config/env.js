@@ -30,6 +30,10 @@ const envSchema = z.object({
 
   // Redis
   REDIS_URL: z.string().default('redis://localhost:6379'),
+  REDIS_TTL_DEFAULT: z.string().default('3600').transform(Number),
+  REDIS_PREFIX: z.string().default('platemate:'),
+  RATE_LIMIT_WINDOW: z.string().default('60').transform(Number),
+  RATE_LIMIT_MAX: z.string().default('100').transform(Number),
 
   // Cloudinary
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
@@ -54,12 +58,39 @@ const envSchema = z.object({
   APP_NAME: z.string().default('PlateMate'),
   API_VERSION: z.string().default('v1'),
 
+  // Google OAuth
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_CALLBACK_URL: z.string().optional(),
+
   // Bcrypt
   BCRYPT_ROUNDS: z.string().default('12').transform(Number),
 
   // Token expiry for email flows
   EMAIL_VERIFY_EXPIRES: z.string().default('24h'),
   PASSWORD_RESET_EXPIRES: z.string().default('1h'),
+}).superRefine((data, ctx) => {
+  // In production, certain credentials are mandatory.
+  // The server must never start in production without payment or media providers configured.
+  if (data.NODE_ENV === 'production') {
+    const required = [
+      ['CLOUDINARY_CLOUD_NAME', 'Cloudinary media storage'],
+      ['CLOUDINARY_API_KEY',    'Cloudinary media storage'],
+      ['CLOUDINARY_API_SECRET', 'Cloudinary media storage'],
+      ['RAZORPAY_KEY_ID',       'Razorpay payment gateway'],
+      ['RAZORPAY_KEY_SECRET',   'Razorpay payment gateway'],
+      ['RAZORPAY_WEBHOOK_SECRET', 'Razorpay webhook verification'],
+    ]
+    for (const [key, group] of required) {
+      if (!data[key]) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: `${key} is required in production (${group})`,
+        })
+      }
+    }
+  }
 })
 
 // ── Parse & export ────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
+import React from 'react'
 import { FiChevronLeft, FiChevronRight } from 'react-icons/fi'
 
-export default function Pagination({ currentPage, totalPages, onPageChange }) {
+export function Pagination({ currentPage, totalPages, onPageChange }) {
   if (totalPages <= 1) return null
 
   const getPages = () => {
@@ -31,30 +32,35 @@ export default function Pagination({ currentPage, totalPages, onPageChange }) {
   }
 
   return (
-    <nav className="flex items-center justify-center gap-2 mt-10">
+    <nav className="flex items-center justify-center gap-2 mt-10" aria-label="Pagination Navigation">
       {/* Prev */}
       <button
+        type="button"
+        aria-label="Go to previous page"
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
-        className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-600 bg-white shadow-card transition-smooth hover:text-[#FF4F5A] hover:shadow-card-hover disabled:opacity-40 disabled:hover:text-gray-600 disabled:cursor-not-allowed"
+        className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-600 dark:text-gray-300 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 shadow-card transition-smooth hover:text-[#FF4F5A] focus-ring disabled:opacity-40 disabled:hover:text-gray-600 disabled:cursor-not-allowed"
       >
-        <FiChevronLeft />
+        <FiChevronLeft aria-hidden="true" />
       </button>
 
       {/* Pages */}
       {getPages().map((page, i) =>
         page === '...' ? (
-          <span key={`ellipsis-${i}`} className="px-2 text-gray-400">
+          <span key={`ellipsis-${i}`} className="px-2 text-gray-400 dark:text-gray-500 select-none">
             ...
           </span>
         ) : (
           <button
             key={page}
+            type="button"
+            aria-label={`Go to page ${page}`}
+            aria-current={currentPage === page ? 'page' : undefined}
             onClick={() => onPageChange(page)}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-semibold transition-smooth ${
+            className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-semibold transition-smooth focus-ring ${
               currentPage === page
                 ? 'gradient-bg text-white shadow-glow'
-                : 'text-gray-600 bg-white shadow-card hover:text-[#FF4F5A] hover:shadow-card-hover'
+                : 'text-gray-600 dark:text-gray-300 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 shadow-card hover:text-[#FF4F5A]'
             }`}
           >
             {page}
@@ -64,12 +70,16 @@ export default function Pagination({ currentPage, totalPages, onPageChange }) {
 
       {/* Next */}
       <button
+        type="button"
+        aria-label="Go to next page"
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
-        className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-600 bg-white shadow-card transition-smooth hover:text-[#FF4F5A] hover:shadow-card-hover disabled:opacity-40 disabled:hover:text-gray-600 disabled:cursor-not-allowed"
+        className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-600 dark:text-gray-300 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 shadow-card transition-smooth hover:text-[#FF4F5A] focus-ring disabled:opacity-40 disabled:hover:text-gray-600 disabled:cursor-not-allowed"
       >
-        <FiChevronRight />
+        <FiChevronRight aria-hidden="true" />
       </button>
     </nav>
   )
 }
+
+export default Pagination

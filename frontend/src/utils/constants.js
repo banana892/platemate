@@ -49,8 +49,29 @@ export const ORDER_STATUS_LABELS = {
 }
 
 export const USER_ROLES = {
-  CUSTOMER: 'customer',
-  RESTAURANT: 'restaurant',
-  DELIVERY: 'delivery',
-  ADMIN: 'admin',
+  CUSTOMER: 'CUSTOMER',
+  PARTNER: 'PARTNER',
+  RIDER: 'RIDER',
+  ADMIN: 'ADMIN',
+}
+
+/**
+ * Returns role-appropriate dashboard landing path.
+ * Role MUST come from Redux auth state — never from localStorage/JWT.
+ */
+export function getDashboardRoute(role = null) {
+  const activeRole = role?.toUpperCase() || null
+  switch (activeRole) {
+    case USER_ROLES.ADMIN:
+      return '/admin'
+    case USER_ROLES.PARTNER:
+    case 'RESTAURANT':
+      return '/partner/dashboard'
+    case USER_ROLES.RIDER:
+    case 'DELIVERY':
+      return '/rider/dashboard'
+    case USER_ROLES.CUSTOMER:
+    default:
+      return '/'
+  }
 }
