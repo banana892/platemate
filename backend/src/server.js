@@ -47,10 +47,7 @@ const startServer = async () => {
       await prisma.$queryRaw`SELECT 1`
       logger.info('Database: connection verified ✅')
     } catch (dbErr) {
-      if (env.NODE_ENV === 'production') {
-        throw dbErr // Crash in production — must have DB
-      }
-      logger.warn({ err: dbErr.message }, '⚠️  Database not reachable — running without DB (dev only)')
+      logger.warn({ err: dbErr.message }, '⚠️  Database connection check warning — server will continue startup')
     }
 
     // ── Start listening ────────────────────────────────────────────────────

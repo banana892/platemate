@@ -23,6 +23,7 @@
  * We use the pg adapter for standard PostgreSQL in Node.js.
  */
 
+import pg from 'pg'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { isDev } from './env.js'
@@ -30,8 +31,9 @@ import { isDev } from './env.js'
 const globalForPrisma = globalThis
 
 const createPrismaClient = () => {
-  // Use pg adapter — required for Prisma v7's "client" engine type
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
+  // Use pg.Pool — required for stable connection pooling with Prisma v7's pg adapter
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL })
+  const adapter = new PrismaPg(pool)
 
   const client = new PrismaClient({
     adapter,

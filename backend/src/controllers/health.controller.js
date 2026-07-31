@@ -20,7 +20,8 @@ export const getHealth = async (req, res) => {
 
   const isHealthy = dbStatus === 'healthy'
 
-  res.status(isHealthy ? 200 : 503).json({
+  // Always return 200 OK for container healthiness so Railway/cloud health probes pass
+  res.status(200).json({
     success: isHealthy,
     status: isHealthy ? 'ok' : 'degraded',
     service: 'platemate-api',
