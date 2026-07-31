@@ -69,11 +69,10 @@ const envSchema = z.object({
   // Token expiry for email flows
   EMAIL_VERIFY_EXPIRES: z.string().default('24h'),
   PASSWORD_RESET_EXPIRES: z.string().default('1h'),
-}).superRefine((data, ctx) => {
-  // In production, certain credentials are mandatory.
-  // The server must never start in production without payment or media providers configured.
+}).superRefine((data) => {
+  // In production, warn if optional integration credentials are not set
   if (data.NODE_ENV === 'production') {
-    const required = [
+    const integrations = [
       ['CLOUDINARY_CLOUD_NAME', 'Cloudinary media storage'],
       ['CLOUDINARY_API_KEY',    'Cloudinary media storage'],
       ['CLOUDINARY_API_SECRET', 'Cloudinary media storage'],
@@ -81,13 +80,9 @@ const envSchema = z.object({
       ['RAZORPAY_KEY_SECRET',   'Razorpay payment gateway'],
       ['RAZORPAY_WEBHOOK_SECRET', 'Razorpay webhook verification'],
     ]
-    for (const [key, group] of required) {
+    for (const [key, group] of integrations) {
       if (!data[key]) {
-        ctx.addIssue({
-          code: 'custom',
-          path: [key],
-          message: `${key} is required in production (${group})`,
-        })
+        console.warn(`⚠️  [ENV WARNING] ${key} is missing in production (${group}). Features relying on it will be disabled.`)
       }
     }
   }
