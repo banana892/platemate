@@ -33,24 +33,12 @@ import riderRoutes from './rider.routes.js'
 import adminRoutes from './admin.routes.js'
 import { paymentRouter, adminPaymentRouter } from './payment.routes.js'
 
+import { getHealth } from '../controllers/health.controller.js'
+
 const router = Router()
 
 // ── Health Check ──────────────────────────────────────────────────────────────
-// This is the most important route in production:
-// - Load balancers (Render, Railway) ping this to verify the server is alive
-// - Monitoring tools check this every 30 seconds
-// - CI/CD pipelines verify deployment success with this
-router.get('/health', (req, res) => {
-  res.json({
-    success: true,
-    status: 'ok',
-    service: 'platemate-api',
-    version: 'v1',
-    timestamp: new Date().toISOString(),
-    uptime: Math.floor(process.uptime()) + 's',
-    environment: process.env.NODE_ENV,
-  })
-})
+router.get('/health', getHealth)
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 // Routes are added here as each phase is implemented.

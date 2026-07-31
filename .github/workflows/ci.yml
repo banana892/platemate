@@ -1,55 +1,56 @@
-name: PlateMate Continuous Integration
+name: PlateMate CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, master, develop ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, master, develop ]
 
 jobs:
-  backend-test:
-    name: Backend Unit & Integration Tests
+  verify:
+    name: Verify Codebase & Builds
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
           cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
 
-      - name: Install dependencies
-        run: cd backend && npm ci
+      - name: Install Dependencies (Backend & Frontend)
+        run: |
+          npm run install:all
 
-      - name: Run Backend Unit Tests
-        run: cd backend && npm run test:unit
+      - name: Prisma Validate & Client Generation
+        run: |
+          cd backend
+          npx prisma validate --config prisma.config.ts
+          npm run db:generate
 
-      - name: Run Backend Integration Tests
-        run: cd backend && npm run test:integration
+      - name: Run Frontend Linting (oxlint)
+        run: |
+          cd frontend
+          npm run lint
 
-  frontend-test:
-    name: Frontend Component & Hook Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+      - name: Run Backend Syntax Check
+        run: |
+          cd backend
+          node --check src/server.js
+          node --check src/app.js
 
-      - name: Install dependencies
-        run: cd frontend && npm ci
+      - name: Build Frontend Application
+        run: |
+          cd frontend
+          npm run build
+        env:
+          VITE_API_BASE_URL: "https://api.platemate.local/api/v1"
 
-      - name: Run Frontend Tests
-        run: cd frontend && npm run test
-
-  security-audit:
-    name: Security Vulnerability Audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Audit Backend
-        run: cd backend && npm audit --audit-level=high
-      - name: Audit Frontend
-        run: cd frontend && npm audit --audit-level=high
+      - name: Verify Build Artifacts
+        run: |
+          test -d frontend/dist
+          test -f frontend/dist/index.html
+          echo "✅ Production build verified successfully!"

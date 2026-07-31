@@ -41,11 +41,15 @@ import errorHandler from './middleware/errorHandler.js'
 import { generalLimiter } from './middleware/rateLimiter.js'
 import { ApiError } from './utils/ApiError.js'
 import { HTTP } from './constants/httpStatus.js'
+import { getHealth } from './controllers/health.controller.js'
 import requestId from './middleware/requestId.js'
 import sanitize from './middleware/sanitize.js'
 import { SECURITY_CONFIG } from './security/security.config.js'
 
 const app = express()
+
+// Root level health check for cloud platform monitors (Render, AWS, Railway)
+app.get('/health', getHealth)
 
 // ── 0. Request ID ──────────────────────────────────────────────────────────────────
 // Attach a unique requestId to every request BEFORE anything else.

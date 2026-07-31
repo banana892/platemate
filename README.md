@@ -100,17 +100,78 @@ npm run dev        # http://localhost:5000
 | 12 | Cloudinary Image Uploads | ⏳ Pending |
 | 13 | Security Hardening | ⏳ Pending |
 | 14 | Testing | ⏳ Pending |
-| 15 | Deployment | ⏳ Pending |
+| 15 | Deployment (Docker, Render, Vercel, CI/CD) | ✅ Complete |
 
 ---
 
-## 🔗 API Documentation
+## 🌐 Production Deployment Guide
 
-Base URL: `http://localhost:5000/api/v1`
+PlateMate is configured for platform-agnostic deployment across Render, Vercel, Railway, Fly.io, Docker, or self-hosted VPS servers.
 
-Health check: `GET /api/v1/health`
+### 1. Deployment Platforms
 
-See `docs/api.md` for full API reference (added in Phase 5).
+#### Option A: Render Blueprint (Recommended)
+1. Push code to your GitHub repository.
+2. Log into [Render Dashboard](https://dashboard.render.com/) and click **New +** -> **Blueprint**.
+3. Connect your repository — Render will automatically detect `render.yaml`.
+4. Fill in required secrets (`CLOUDINARY_*`, `RAZORPAY_*`, `ALLOWED_ORIGINS`, `CLIENT_URL`).
+5. Click **Apply** — database, API, and static site will deploy automatically.
+
+#### Option B: Render Web Service (Backend) + Vercel (Frontend)
+- **Backend (Render Web Service)**:
+  - Build Command: `npm install && npm run build`
+  - Start Command: `npm run db:migrate:prod && npm run start`
+  - Health Check Path: `/health`
+- **Frontend (Vercel)**:
+  - Root Directory: `frontend`
+  - Build Command: `npm run build`
+  - Output Directory: `dist`
+  - Environment Variable: `VITE_API_BASE_URL=https://<your-backend-render-url>/api/v1`
+
+#### Option C: Docker Container Deployment
+```bash
+# Build and launch PostgreSQL, Redis, Express Backend, and Frontend Nginx
+docker compose up --build -d
+
+# Verify container health
+docker compose ps
+```
+
+---
+
+## 🔑 Environment Variables Checklist
+
+### Backend (`backend/.env`)
+| Variable | Required | Description | Example / Default |
+|---|---|---|---|
+| `NODE_ENV` | Yes | App runtime mode | `production` |
+| `PORT` | Yes | HTTP listening port | `5000` |
+| `DATABASE_URL` | Yes | PostgreSQL connection string | `postgresql://user:pass@host:5432/platemate?sslmode=require` |
+| `JWT_ACCESS_SECRET` | Yes | Min 32 chars secret key | `openssl rand -base64 32` |
+| `JWT_REFRESH_SECRET` | Yes | Min 32 chars secret key | `openssl rand -base64 32` |
+| `CLIENT_URL` | Yes | Frontend application domain | `https://platemate.vercel.app` |
+| `ALLOWED_ORIGINS` | Yes | Comma-separated allowed origins | `https://platemate.vercel.app,https://yourdomain.com` |
+| `CLOUDINARY_CLOUD_NAME` | Yes (Prod) | Cloudinary cloud identifier | `platemate-cloud` |
+| `CLOUDINARY_API_KEY` | Yes (Prod) | Cloudinary API key | `1234567890` |
+| `CLOUDINARY_API_SECRET` | Yes (Prod) | Cloudinary API secret | `secret_key` |
+| `RAZORPAY_KEY_ID` | Yes (Prod) | Razorpay payment key | `rzp_test_xxxxxx` |
+| `RAZORPAY_KEY_SECRET` | Yes (Prod) | Razorpay secret key | `secret_xxxxxx` |
+
+### Frontend (`frontend/.env`)
+| Variable | Required | Description | Example |
+|---|---|---|---|
+| `VITE_API_BASE_URL` | Yes | Backend API base URL | `https://platemate-api.onrender.com/api/v1` |
+| `VITE_SOCKET_URL` | Optional | WebSocket host override | `https://platemate-api.onrender.com` |
+| `VITE_RAZORPAY_KEY_ID` | Yes | Razorpay test key ID | `rzp_test_xxxxxx` |
+
+---
+
+## 🛠️ Common Troubleshooting Guide
+
+- **Database Connection Failure (`P1001`)**: Ensure `DATABASE_URL` contains `?sslmode=require` if required by cloud provider (Neon, Supabase, Render).
+- **Prisma Client Missing (`@prisma/client did not initialize`)**: Run `npm run db:generate` inside `backend`.
+- **CORS Error (`Blocked by CORS policy`)**: Ensure `ALLOWED_ORIGINS` in backend environment includes the exact domain of the frontend (without trailing slashes).
+- **WebSocket Disconnection**: Ensure `VITE_SOCKET_URL` or `VITE_API_BASE_URL` matches the backend protocol (`https://` or `http://`).
 
 ---
 
@@ -118,9 +179,8 @@ See `docs/api.md` for full API reference (added in Phase 5).
 
 - **Monorepo**: Single Git repo for frontend + backend
 - **JWT Strategy**: Short-lived access tokens (15m) + long-lived refresh tokens (7d) in httpOnly cookies
-- **Payments**: Mock → Razorpay (UPI, Cards, Wallets)
+- **Payments**: Razorpay (UPI, Cards, Wallets)
 - **Email**: Resend — mandatory email verification on register
-- **Geography**: Multi-city from day one (lat/lng + delivery radius)
 - **Logging**: Pino (structured JSON in production, pretty in development)
 
 ---
@@ -137,3 +197,4 @@ See `docs/api.md` for full API reference (added in Phase 5).
 - [Socket.io](https://socket.io/)
 - [Cloudinary](https://cloudinary.com/)
 - [Resend](https://resend.com/)
+

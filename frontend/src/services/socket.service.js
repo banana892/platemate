@@ -25,7 +25,18 @@ class SocketService {
       return
     }
 
-    const socketUrl = window.location.origin
+    let socketUrl = import.meta.env.VITE_SOCKET_URL
+    if (!socketUrl && import.meta.env.VITE_API_BASE_URL) {
+      try {
+        const parsed = new URL(import.meta.env.VITE_API_BASE_URL, window.location.origin)
+        socketUrl = parsed.origin
+      } catch {
+        socketUrl = import.meta.env.VITE_API_BASE_URL.replace(/\/api\/v1\/?$/, '')
+      }
+    }
+    if (!socketUrl) {
+      socketUrl = window.location.origin
+    }
 
     this.socket = io(socketUrl, {
       auth: { token },
