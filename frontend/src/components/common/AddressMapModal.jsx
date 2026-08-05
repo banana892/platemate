@@ -38,9 +38,53 @@ import {
 } from 'react-icons/fi'
 import { toast } from 'react-hot-toast'
 
+// Attach global Google Maps auth failure handler
+if (typeof window !== 'undefined') {
+  window.gm_authFailure = () => {
+    window.dispatchEvent(new CustomEvent('google-maps-auth-failure'))
+  }
+}
+
 // Default fallback coordinates (Bangalore, India)
 const DEFAULT_CENTER = { lat: 12.9716, lng: 77.5946 }
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+
+/**
+ * Local Error Boundary for Google Maps section
+ * Prevents SDK/Loader errors from crashing the top-level application
+ */
+class MapErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.warn('Google Maps error caught by MapErrorBoundary:', error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full h-full min-h-[280px] flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-800 p-6 text-center rounded-2xl border border-gray-200 dark:border-gray-700">
+          <FiAlertTriangle className="text-4xl text-rose-500 mb-3" />
+          <p className="text-sm font-bold text-gray-800 dark:text-gray-200">
+            Google Maps Unavailable
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-xs leading-relaxed">
+            Google Maps failed to load. You can manually enter your address in the form on the right.
+          </p>
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
+}
 
 // Zod Schema for Address Form Validation
 const addressFormSchema = z.object({
@@ -222,6 +266,17 @@ function AddressMapModalContent({
   const [markerPosition, setMarkerPosition] = useState(DEFAULT_CENTER)
   const [isLocating, setIsLocating] = useState(false)
   const [geocodedAddress, setGeocodedAddress] = useState('')
+  const [mapError, setMapError] = useState(
+    GOOGLE_MAPS_API_KEY ? null : 'Google Maps API key is not configured.'
+  )
+
+  useEffect(() => {
+    const handleAuthFailure = () => {
+      setMapError('Google Maps API Key is invalid or missing required permissions/billing in Google Cloud Console.')
+    }
+    window.addEventListener('google-maps-auth-failure', handleAuthFailure)
+    return () => window.removeEventListener('google-maps-auth-failure', handleAuthFailure)
+  }, [])
 
   const geocoderRef = useRef(null)
   const geocodingLibrary = useMapsLibrary('geocoding')
@@ -721,22 +776,16 @@ export default function AddressMapModal({
           </button>
         </div>
 
-        {/* Body wrapped inside APIProvider */}
-        {GOOGLE_MAPS_API_KEY ? (
-          <APIProvider apiKey={GOOGLE_MAPS_API_KEY}>
+        {/* Body wrapped inside MapErrorBoundary & APIProvider */}
+        <MapErrorBoundary>
+          <APIProvider apiKey={GOOGLE_MAPS_API_KEY || ''}>
             <AddressMapModalContent
               onClose={onClose}
               onSaveAddress={onSaveAddress}
               editingAddress={editingAddress}
             />
           </APIProvider>
-        ) : (
-          <AddressMapModalContent
-            onClose={onClose}
-            onSaveAddress={onSaveAddress}
-            editingAddress={editingAddress}
-          />
-        )}
+        </MapErrorBoundary>
       </div>
     </div>
   )
