@@ -48,6 +48,10 @@ import { SECURITY_CONFIG } from './security/security.config.js'
 
 const app = express()
 
+// Trust reverse proxy (Railway, Render, Vercel, Cloudflare, Nginx)
+// Required for express-rate-limit to read X-Forwarded-For headers correctly
+app.set('trust proxy', 1)
+
 // Root level health check for cloud platform monitors (Render, AWS, Railway)
 app.get('/health', getHealth)
 
