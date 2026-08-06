@@ -101,6 +101,9 @@ export const initializePayment = async (userId, orderId, method) => {
       data: { status: 'CONFIRMED' },
     })
 
+    // Clear user's cart on COD order confirmation
+    await prisma.cart.deleteMany({ where: { userId } }).catch(() => {})
+
     return {
       paymentId: payment.id,
       orderId: order.id,

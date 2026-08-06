@@ -151,6 +151,17 @@ export const transactionUpdatePaymentAndOrder = async (paymentId, paymentData, o
       })
     }
 
+    // Delete user cart upon payment confirmation
+    if (payment.userId && (paymentData.status === 'CAPTURED' || orderStatus === 'CONFIRMED')) {
+      try {
+        await tx.cart.deleteMany({
+          where: { userId: payment.userId },
+        })
+      } catch {
+        // Ignore if cart was already deleted
+      }
+    }
+
     return { payment, order }
   })
 }

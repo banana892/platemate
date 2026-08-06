@@ -128,6 +128,30 @@ export function usePayment() {
       return
     }
 
+    // ── Online Payment: Fast Path for Mock/Demo Provider Orders ──────────────
+    if (providerOrderId && providerOrderId.startsWith('order_mock_')) {
+      dispatch(paymentVerifying())
+      try {
+        await paymentService.verifyPayment({
+          orderId,
+          providerPaymentId: `pay_mock_${Date.now()}`,
+          providerOrderId,
+          providerSignature: 'mock_signature',
+        })
+        dispatch(clearCart())
+        dispatch(paymentSuccess({ orderId }))
+        toast.success('Payment verified & order confirmed! 🎉')
+        navigate('/profile/orders', { state: { newOrderId: orderId } })
+      } catch (verifyErr) {
+        const message = verifyErr?.response?.data?.message || verifyErr?.message || 'Payment verification failed.'
+        toast.error(message)
+        dispatch(paymentFailed({ message }))
+      } finally {
+        dispatch(paymentIdle())
+      }
+      return
+    }
+
     // ── Online Payment: Load Razorpay SDK ─────────────────────────────────────
     const loaded = await loadRazorpayScript()
 

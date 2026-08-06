@@ -26,24 +26,21 @@ export const createOrder = async (userId, { addressId, couponCode, notes, items 
   // 1. Run checkout validations (this throws if range, min order, items, or restaurant is invalid)
   const validation = await checkoutService.validateCheckout(userId, { addressId, couponCode, items })
 
-  // 2. Fetch the current cart to retrieve items
-  const cart = await cartRepo.findCartByUserId(userId)
-  if (!cart || cart.items.length === 0) {
-    throw new ApiError(HTTP.BAD_REQUEST, MSG.CART_EMPTY)
-  }
+  const restaurantId = validation.restaurant.id
+  const cartId = validation.cartId || null
 
-  // 3. Fetch the address to build the snapshot string
+  // 2. Fetch the address to build the snapshot string
   const address = await addressRepo.findAddressById(addressId)
 
   const deliveryAddressString = `${address.label}: ${address.street}${
     address.landmark ? ', ' + address.landmark : ''
   }, ${address.city}, ${address.state}, ${address.postalCode}, ${address.country}`
 
-  // 4. Construct Order data
+  // 3. Construct Order data
   const orderData = {
     orderNumber: generateOrderNumber(),
     userId,
-    restaurantId: cart.restaurantId,
+    restaurantId,
     couponId: validation.couponApplied ? validation.couponApplied.id : null,
     status: 'PENDING',
     subtotal: validation.totals.subtotal,
@@ -58,21 +55,27 @@ export const createOrder = async (userId, { addressId, couponCode, notes, items 
     estimatedDeliveryTime: new Date(Date.now() + 45 * 60 * 1000), // 45 minutes ETA
   }
 
-  // 5. Construct Order Items data
-  const orderItemsData = cart.items.map((item) => ({
-    menuItemId: item.menuItem.id,
-    name: item.menuItem.name,
-    quantity: item.quantity,
-    unitPrice: item.menuItem.price,
-    totalPrice: item.quantity * Number(item.menuItem.price),
-  }))
+  // 4. Construct Order Items data from validation.items
+  const orderItemsData = (validation.items && validation.items.length > 0)
+    ? validation.items.map((item) => ({
+        menuItemId: item.menuItemId,
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+      }))
+    : []
 
-  // 6. Execute transaction-safe order creation
-  const order = await orderRepo.createOrder(orderData, orderItemsData, cart.id)
+  if (orderItemsData.length === 0) {
+    throw new ApiError(HTTP.BAD_REQUEST, MSG.CART_EMPTY)
+  }
 
-  // 7. Real-time Events
+  // 5. Execute transaction-safe order creation
+  const order = await orderRepo.createOrder(orderData, orderItemsData, cartId)
+
+  // 6. Real-time Events
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } })
-  emitToRestaurant(cart.restaurantId, EVENTS.RESTAURANT_NEW_ORDER, {
+  emitToRestaurant(restaurantId, EVENTS.RESTAURANT_NEW_ORDER, {
     id: order.id,
     orderNumber: order.orderNumber,
     customerName: user?.name || 'Customer',

@@ -91,30 +91,34 @@ export const register = async (data) => {
   // Hash password
   const hashedPassword = await hashPassword(password)
 
-  // Create user (isVerified defaults to false in schema)
+  const requireVerification = env.REQUIRE_EMAIL_VERIFICATION === true
+
+  // Create user (if verification is NOT required, auto-verify user)
   const user = await authRepo.createUser({
     name,
     email,
     password: hashedPassword,
     phone: phone || null,
     role: role || 'CUSTOMER',
+    isVerified: !requireVerification,
   })
 
-  // Generate email verification token
-  const rawToken = generateRandomToken()
-  const hashedVToken = hashToken(rawToken)
+  // Generate and send verification email if required
+  if (requireVerification) {
+    const rawToken = generateRandomToken()
+    const hashedVToken = hashToken(rawToken)
 
-  await authRepo.createVerificationToken({
-    userId: user.id,
-    hashedToken: hashedVToken,
-    type: 'EMAIL_VERIFY',
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-  })
+    await authRepo.createVerificationToken({
+      userId: user.id,
+      hashedToken: hashedVToken,
+      type: 'EMAIL_VERIFY',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+    })
 
-  // Send verification email (non-blocking — don't await)
-  sendVerificationEmail(email, name, rawToken).catch((err) => {
-    logger.error({ err, userId: user.id }, 'Failed to send verification email')
-  })
+    sendVerificationEmail(email, name, rawToken).catch((err) => {
+      logger.error({ err, userId: user.id }, 'Failed to send verification email')
+    })
+  }
 
   return user
 }

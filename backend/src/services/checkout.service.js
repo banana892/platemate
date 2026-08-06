@@ -29,6 +29,11 @@ export const validateCheckout = async (userId, { addressId, couponCode, items })
       if (menuItem) {
         if (!cart) {
           cart = await cartRepo.createCart(userId, menuItem.restaurantId)
+        } else if (!cart.restaurantId) {
+          await prisma.cart.update({
+            where: { id: cart.id },
+            data: { restaurantId: menuItem.restaurantId },
+          })
         }
         await cartRepo.createCartItem(cart.id, menuItem.id, item.quantity || 1)
       }
@@ -125,6 +130,7 @@ export const validateCheckout = async (userId, { addressId, couponCode, items })
   const grandTotal = subtotal + deliveryFee + tax - discount
 
   return {
+    cartId: cart.id,
     restaurant: {
       id: restaurant.id,
       name: restaurant.name,
@@ -144,6 +150,13 @@ export const validateCheckout = async (userId, { addressId, couponCode, items })
       discount: parseFloat(discount.toFixed(2)),
       grandTotal: parseFloat(Math.max(0, grandTotal).toFixed(2)),
     },
+    items: cart.items.map((item) => ({
+      menuItemId: item.menuItem.id,
+      name: item.menuItem.name,
+      quantity: item.quantity,
+      unitPrice: Number(item.menuItem.price),
+      totalPrice: item.quantity * Number(item.menuItem.price),
+    })),
     couponApplied: coupon ? { id: coupon.id, code: coupon.code, discount } : null,
   }
 }

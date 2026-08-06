@@ -34,12 +34,7 @@ export const createOrder = async (orderData, orderItemsData, cartId) => {
       })
     }
 
-    // 3. Clear user's shopping cart (deletes Cart which cascades to CartItems)
-    await tx.cart.delete({
-      where: { id: cartId },
-    })
-
-    // 4. Create pending payment record (since payments are not integrated yet, set as PENDING)
+    // 3. Create pending payment record (since payments are not integrated yet, set as PENDING)
     await tx.payment.create({
       data: {
         orderId: order.id,

@@ -66,7 +66,11 @@ const envSchema = z.object({
   // Bcrypt
   BCRYPT_ROUNDS: z.string().default('12').transform(Number),
 
-  // Token expiry for email flows
+  // Email Verification Toggle
+  REQUIRE_EMAIL_VERIFICATION: z
+    .string()
+    .default('false')
+    .transform((val) => val === 'true'),
   EMAIL_VERIFY_EXPIRES: z.string().default('24h'),
   PASSWORD_RESET_EXPIRES: z.string().default('1h'),
 }).superRefine((data) => {

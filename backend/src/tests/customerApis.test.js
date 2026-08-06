@@ -393,10 +393,14 @@ const testOrderEndpoints = async () => {
   testOrderId = createBody.data.id
   console.log(`✅ Placed order successfully! Order Number: ${createBody.data.orderNumber} (ID: ${testOrderId})`)
 
-  // 2. Verify cart is now empty
+  // 2. Confirm payment / COD to complete order and clear cart
+  await apiRequest('/payments/create-order', {
+    method: 'POST',
+    body: JSON.stringify({ orderId: testOrderId, method: 'COD' }),
+  })
   const { body: cartBody } = await apiRequest('/cart')
-  assert(cartBody.data.items.length === 0, 'Cart should be cleared after order')
-  console.log('✅ Verified cart was automatically cleared')
+  assert(cartBody.data.items.length === 0, 'Cart should be cleared after payment confirmation')
+  console.log('✅ Verified cart was automatically cleared on payment confirmation')
 
   // 3. Get order history
   const { body: listBody } = await apiRequest('/orders')
