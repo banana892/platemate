@@ -57,6 +57,14 @@ export const applyCoupon = asyncHandler(async (req, res) => {
   // To apply a coupon, we validate the coupon code against the cart's subtotal
   const cart = await cartService.getCart(req.user.id)
   if (!cart || cart.items.length === 0) {
+    console.log('🔴 [DEBUG CART_EMPTY - Branch 1: cart.controller.js:applyCoupon]', {
+      requestBody: req.body,
+      databaseCart: cart,
+      cartItems: cart?.items || [],
+      validationItems: null,
+      validationCartId: null,
+      orderItemsData: null,
+    })
     return res.status(HTTP.BAD_REQUEST).json({
       success: false,
       message: MSG.CART_EMPTY,

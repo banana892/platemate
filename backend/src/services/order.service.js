@@ -67,6 +67,14 @@ export const createOrder = async (userId, { addressId, couponCode, notes, items 
     : []
 
   if (orderItemsData.length === 0) {
+    console.log('🔴 [DEBUG CART_EMPTY - Branch 3: order.service.js:createOrder]', {
+      requestBody: { addressId, couponCode, notes, items },
+      validationItems: validation?.items || null,
+      validationCartId: cartId,
+      databaseCart: null,
+      cartItems: null,
+      orderItemsData,
+    })
     throw new ApiError(HTTP.BAD_REQUEST, MSG.CART_EMPTY)
   }
 

@@ -42,6 +42,14 @@ export const validateCheckout = async (userId, { addressId, couponCode, items })
   }
 
   if (!cart || cart.items.length === 0) {
+    console.log('🔴 [DEBUG CART_EMPTY - Branch 2: checkout.service.js:validateCheckout]', {
+      requestBody: { addressId, couponCode, items },
+      validationItems: null,
+      validationCartId: cart?.id || null,
+      databaseCart: cart,
+      cartItems: cart?.items || [],
+      orderItemsData: null,
+    })
     throw new ApiError(HTTP.BAD_REQUEST, MSG.CART_EMPTY)
   }
 
